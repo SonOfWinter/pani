@@ -1,10 +1,12 @@
 import { CloudSettings } from './CloudSettings'
 import type { CloudBackup } from '../backup/useCloudBackup'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { database } from '../data/database'
 import { makeBackup, readBackupFile, restoreSnapshot, type Snapshot } from '../backup/snapshot'
 import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { Button } from './ui/button'
+
+type BackupOperation = 'export' | 'preview' | 'restore'
 
 function download(text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
@@ -19,24 +21,37 @@ function download(text: string) {
 
 export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
   const sheet = useRef<BottomSheetHandle>(null)
+  const feedback = useRef<HTMLDivElement>(null)
+  const previewRegion = useRef<HTMLElement>(null)
   const [phrase, setPhrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<{ data: Snapshot; revision: number; owner?: string }>()
-  const [busy, setBusy] = useState(false)
+  const [operation, setOperation] = useState<BackupOperation>()
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  async function run(operation: () => Promise<void>) {
-    setBusy(true)
+  const busy = operation !== undefined
+  const visiblePreview = preview && (!preview.owner || preview.owner === cloud.accountId) ? preview : undefined
+
+  useLayoutEffect(() => {
+    if (busy) return
+    const target = error || message ? feedback.current : visiblePreview ? previewRegion.current : null
+    target?.focus({ preventScroll: true })
+    target?.scrollIntoView({ block: 'start' })
+  }, [busy, error, message, visiblePreview])
+
+  async function run(kind: BackupOperation, perform: () => Promise<void>) {
+    if (busy) return
+    setOperation(kind)
     setError('')
     setMessage('')
     try {
-      await operation()
+      await perform()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Une erreur est survenue.')
     } finally {
-      setBusy(false)
+      setOperation(undefined)
     }
   }
 
@@ -47,6 +62,34 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
           <h2 id="backup-title" className="text-xl font-semibold">Sauvegardes</h2>
           <Button variant="ghost" disabled={busy} onClick={() => sheet.current?.dismiss()}>Fermer</Button>
         </div>
+        {(message || error) && (
+          <div ref={feedback} tabIndex={-1} className="my-3 rounded-lg bg-muted p-3">
+            {message && <p role="status">{message}</p>}
+            {error && <p role="alert">{error}</p>}
+          </div>
+        )}
+        {visiblePreview && (
+          <section
+            ref={previewRegion}
+            tabIndex={-1}
+            className="my-3 grid gap-2 rounded-lg border border-border p-3"
+            aria-labelledby="restore-preview-title"
+          >
+            <h3 id="restore-preview-title" className="font-semibold">Aperçu à restaurer</h3>
+            <p>
+              {new Date(visiblePreview.data.date).toLocaleString('fr-FR')} · {visiblePreview.data.items.length} article(s) · {visiblePreview.data.categories.length} catégorie(s)
+            </p>
+            {hasData && <p>Cette action remplace la liste locale. Vous pouvez d’abord l’exporter ci-dessous.</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" disabled={busy} onClick={() => setPreview(undefined)}>Annuler</Button>
+              <Button variant="destructive" disabled={busy} onClick={() => void run('restore', async () => {
+                await restoreSnapshot(visiblePreview.data, visiblePreview.revision)
+                setPreview(undefined)
+                setMessage('Sauvegarde restaurée.')
+              })}>{operation === 'restore' ? 'Restauration…' : 'Confirmer le remplacement'}</Button>
+            </div>
+          </section>
+        )}
         <p className="my-3 text-sm text-muted-foreground">
           Gardez votre phrase de récupération en lieu sûr. Elle est nécessaire pour ouvrir un fichier chiffré.
         </p>
@@ -67,7 +110,7 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
               Confirmer la phrase pour exporter
               <input className="pani-input" type="password" autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
             </label>
-            <Button disabled={!phrase.trim() || phrase !== confirmation} onClick={() => void run(async () => {
+            <Button disabled={!phrase.trim() || phrase !== confirmation} onClick={() => void run('export', async () => {
               download((await makeBackup(phrase)).text)
               setMessage('Fichier chiffré préparé.')
             })}>Exporter</Button>
@@ -78,40 +121,28 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
               Fichier de sauvegarde
               <input
                 type="file"
-                accept=".pani,.json,application/json"
                 onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(undefined) }}
               />
             </label>
+            {(!file || !phrase.trim()) && (
+              <p className="text-sm text-muted-foreground">Choisissez le fichier de sauvegarde et saisissez sa phrase de récupération ci-dessus.</p>
+            )}
             <Button disabled={!file || !phrase.trim()} onClick={() => {
               if (!file) return
               setPreview(undefined)
-              void run(async () => {
+              void run('preview', async () => {
                 const { revision } = await database.readState()
                 const data = await readBackupFile(file, phrase)
                 setPreview({ data, revision })
               })
-            }}>Ouvrir l’aperçu</Button>
+            }}>{operation === 'preview' ? 'Lecture de la sauvegarde…' : 'Ouvrir l’aperçu'}</Button>
           </section>
         </fieldset>
-        <CloudSettings cloud={cloud} onPreview={(data, revision, owner) => setPreview({ data, revision, owner })} />
-        {preview && (!preview.owner || preview.owner === cloud.accountId) && (
-          <section className="mt-4 grid gap-2 rounded-lg border border-border p-3" aria-label="Aperçu à restaurer">
-            <p>
-              {new Date(preview.data.date).toLocaleString('fr-FR')} · {preview.data.items.length} article(s) · {preview.data.categories.length} catégorie(s)
-            </p>
-            {hasData && <p>Cette action remplace la liste locale. Vous pouvez d’abord l’exporter ci-dessus.</p>}
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={() => setPreview(undefined)}>Annuler</Button>
-              <Button variant="destructive" disabled={busy} onClick={() => void run(async () => {
-                await restoreSnapshot(preview.data, preview.revision)
-                setPreview(undefined)
-                setMessage('Sauvegarde restaurée.')
-              })}>Confirmer le remplacement</Button>
-            </div>
-          </section>
-        )}
-        {message && <p role="status">{message}</p>}
-        {error && <p role="alert">{error}</p>}
+        <CloudSettings cloud={cloud} onPreview={(data, revision, owner) => {
+          setError('')
+          setMessage('')
+          setPreview({ data, revision, owner })
+        }} />
       </div>
     </BottomSheet>
   )
