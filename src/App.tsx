@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import { ItemEditor } from './components/ItemEditor'
+import { deleteItem } from './data/items'
 import { Button } from './components/ui/button'
 import { database, type Category, type Item, type Mode } from './data/database'
 
@@ -35,6 +37,19 @@ export function App() {
     [],
   )
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
+
+  async function remove(item: Item) {
+    if (!window.confirm(`Supprimer « ${item.name} » ?`)) return
+    try {
+      await deleteItem(item.id)
+      setError('')
+      document.getElementById('add-item')?.focus()
+    } catch {
+      setError('Impossible de supprimer cet article.')
+    }
+  }
 
   async function switchMode(mode: Mode) {
     try {
@@ -49,7 +64,10 @@ export function App() {
   const categories = result?.list?.categories ?? []
   const mode = result?.list?.state.mode ?? 'list'
   const remaining = items.filter((item) => item.checkedAt === null).length
-  const groups = groupItems(items, categories)
+  const matching = mode === 'list' && query.trim()
+    ? items.filter((item) => item.name.toLocaleLowerCase('fr').includes(query.trim().toLocaleLowerCase('fr')))
+    : items
+  const groups = groupItems(matching, categories)
 
   return (
     <main className="pani-shell mx-auto max-w-xl">
@@ -72,12 +90,25 @@ export function App() {
           </Button>
         ))}
       </div>
+      {result?.list && mode === 'list' && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <input
+            type="search"
+            className="pani-input min-w-40 flex-1"
+            aria-label="Rechercher un article"
+            placeholder="Rechercher"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <Button id="add-item" onClick={() => setEditor({ item: null })}>Ajouter un article</Button>
+        </div>
+      )}
       {error && <p role="alert">{error}</p>}
       {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
       {!result && <p role="status">Ouverture de la liste…</p>}
       {result?.list && groups.length === 0 && (
         <p className="rounded-lg bg-card p-5 text-muted-foreground">
-          {mode === 'list' ? 'Votre liste est vide.' : 'Aucun article à acheter.'}
+          {mode === 'list' ? (query.trim() ? 'Aucun résultat.' : 'Votre liste est vide.') : 'Aucun article à acheter.'}
         </p>
       )}
       {groups.map((group) => (
@@ -86,13 +117,32 @@ export function App() {
           <ul className="divide-y divide-muted rounded-lg bg-card">
             {group.items.map((item) => (
               <li key={item.id} className="flex min-h-11 items-center justify-between gap-4 px-4 py-2">
-                <span>{item.name}</span>
-                <span className="shrink-0 text-sm text-muted-foreground">{item.quantity}</span>
+                <div className="min-w-0">
+                  <p className="break-words">{item.name}</p>
+                  {item.quantity && <p className="break-words text-sm text-muted-foreground">{item.quantity}</p>}
+                </div>
+                {mode === 'list' && (
+                  <details className="shrink-0">
+                    <summary className="flex min-h-11 cursor-pointer items-center px-2" aria-label={`Actions pour ${item.name}`}>•••</summary>
+                    <Button variant="ghost" onClick={() => setEditor({ item })}>Modifier</Button>
+                    <Button variant="ghost" onClick={() => void remove(item)}>Supprimer</Button>
+                  </details>
+                )}
               </li>
             ))}
           </ul>
         </section>
       ))}
+      {editor && (
+        <ItemEditor
+          item={editor.item}
+          onClose={() => setEditor(null)}
+          onSave={() => {
+            if (!editor.item) setQuery('')
+            setEditor(null)
+          }}
+        />
+      )}
     </main>
   )
 }

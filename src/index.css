@@ -73,3 +73,18 @@
   padding-block: max(2rem, env(safe-area-inset-top)) max(2rem, env(safe-area-inset-bottom));
   padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
 }
+
+.pani-input {
+  @apply min-h-11 rounded-lg border border-border bg-card px-3 text-base;
+}
+
+.pani-sheet {
+  @apply fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl rounded-t-3xl bg-card p-5 text-foreground;
+  max-height: min(90dvh, 38rem);
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  overflow: auto;
+}
+
+.pani-sheet::backdrop {
+  background: rgb(0 0 0 / 42%);
+}
