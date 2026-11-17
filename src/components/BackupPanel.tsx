@@ -21,10 +21,14 @@ function download(text: string) {
 
 export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
   const sheet = useRef<BottomSheetHandle>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const restorePhraseInput = useRef<HTMLInputElement>(null)
   const feedback = useRef<HTMLDivElement>(null)
   const previewRegion = useRef<HTMLElement>(null)
   const [phrase, setPhrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
+  const [restorePhrase, setRestorePhrase] = useState('')
+  const [missing, setMissing] = useState<'file' | 'phrase'>()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<{ data: Snapshot; revision: number; owner?: string }>()
   const [operation, setOperation] = useState<BackupOperation>()
@@ -53,6 +57,26 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
     } finally {
       setOperation(undefined)
     }
+  }
+
+  function openFilePreview() {
+    if (!file) {
+      setMissing('file')
+      fileInput.current?.focus()
+      return
+    }
+    if (!restorePhrase.trim()) {
+      setMissing('phrase')
+      restorePhraseInput.current?.focus()
+      return
+    }
+    setMissing(undefined)
+    setPreview(undefined)
+    void run('preview', async () => {
+      const { revision } = await database.readState()
+      const data = await readBackupFile(file, restorePhrase)
+      setPreview({ data, revision })
+    })
   }
 
   return (
@@ -101,7 +125,7 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
               type="password"
               autoComplete="off"
               value={phrase}
-              onChange={(event) => { setPhrase(event.target.value); setPreview(undefined) }}
+              onChange={(event) => setPhrase(event.target.value)}
             />
           </label>
           <section className="grid gap-2 rounded-lg bg-muted p-3">
@@ -120,22 +144,42 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
             <label className="grid gap-1">
               Fichier de sauvegarde
               <input
+                ref={fileInput}
                 type="file"
-                onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(undefined) }}
+                aria-invalid={missing === 'file' || undefined}
+                aria-describedby={missing === 'file' ? 'restore-file-message' : undefined}
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null)
+                  setMissing(undefined)
+                  setPreview(undefined)
+                }}
               />
             </label>
-            {(!file || !phrase.trim()) && (
-              <p className="text-sm text-muted-foreground">Choisissez le fichier de sauvegarde et saisissez sa phrase de récupération ci-dessus.</p>
+            <label className="grid gap-1">
+              Phrase de récupération du fichier
+              <input
+                ref={restorePhraseInput}
+                className="pani-input"
+                type="password"
+                autoComplete="off"
+                value={restorePhrase}
+                aria-invalid={missing === 'phrase' || undefined}
+                aria-describedby={missing === 'phrase' ? 'restore-file-message' : undefined}
+                onChange={(event) => {
+                  setRestorePhrase(event.target.value)
+                  setMissing(undefined)
+                  setPreview(undefined)
+                }}
+              />
+            </label>
+            {missing && (
+              <p id="restore-file-message" role="alert" className="text-sm text-destructive">
+                {missing === 'file' ? 'Choisissez un fichier de sauvegarde.' : 'Saisissez la phrase utilisée pour chiffrer ce fichier.'}
+              </p>
             )}
-            <Button disabled={!file || !phrase.trim()} onClick={() => {
-              if (!file) return
-              setPreview(undefined)
-              void run('preview', async () => {
-                const { revision } = await database.readState()
-                const data = await readBackupFile(file, phrase)
-                setPreview({ data, revision })
-              })
-            }}>{operation === 'preview' ? 'Lecture de la sauvegarde…' : 'Ouvrir l’aperçu'}</Button>
+            <Button onClick={openFilePreview}>
+              {operation === 'preview' ? 'Lecture de la sauvegarde…' : 'Ouvrir l’aperçu'}
+            </Button>
           </section>
         </fieldset>
         <CloudSettings cloud={cloud} onPreview={(data, revision, owner) => {

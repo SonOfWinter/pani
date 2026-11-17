@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { listCloudSnapshots, openCloudSnapshot, type CloudSnapshot } from '../backup/cloud'
 import type { Snapshot } from '../backup/snapshot'
 import { database } from '../data/database'
@@ -8,6 +8,7 @@ export function CloudRestore({ accountId, onPreview }: {
   accountId: string
   onPreview: (data: Snapshot, revision: number, owner: string) => void
 }) {
+  const phraseInput = useRef<HTMLInputElement>(null)
   const [snapshots, setSnapshots] = useState<CloudSnapshot[]>()
   const [path, setPath] = useState('')
   const [phrase, setPhrase] = useState('')
@@ -34,7 +35,6 @@ export function CloudRestore({ accountId, onPreview }: {
         setSnapshots(latest)
         setPath(latest[0]?.path ?? '')
       })}>{action === 'list' ? 'Chargement…' : 'Charger les sauvegardes'}</Button>
-      {error && <p role="alert">{error}</p>}
       {snapshots?.length === 0 && <p>Aucune sauvegarde dans ce compte.</p>}
       {Boolean(snapshots?.length) && (
         <>
@@ -46,15 +46,27 @@ export function CloudRestore({ accountId, onPreview }: {
             </select>
           </label>
           <label className="grid gap-1">Phrase de récupération de cette sauvegarde
-            <input className="pani-input" value={phrase} type="password" autoComplete="off" onChange={(event) => setPhrase(event.target.value)} />
+            <input ref={phraseInput} className="pani-input" value={phrase} type="password" autoComplete="off" onChange={(event) => setPhrase(event.target.value)} />
           </label>
-          <Button disabled={!phrase.trim() || !path} onClick={() => void run('preview', async () => {
-            const { revision } = await database.readState()
-            onPreview(await openCloudSnapshot(accountId, path, phrase), revision, accountId)
-            setPhrase('')
-          })}>{action === 'preview' ? 'Lecture de la sauvegarde…' : 'Ouvrir l’aperçu distant'}</Button>
+          <Button onClick={() => {
+            if (!path) {
+              setError('Sélectionnez une sauvegarde distante.')
+              return
+            }
+            if (!phrase.trim()) {
+              setError('Saisissez la phrase de récupération de cette sauvegarde.')
+              phraseInput.current?.focus()
+              return
+            }
+            void run('preview', async () => {
+              const { revision } = await database.readState()
+              onPreview(await openCloudSnapshot(accountId, path, phrase), revision, accountId)
+              setPhrase('')
+            })
+          }}>{action === 'preview' ? 'Lecture de la sauvegarde…' : 'Ouvrir l’aperçu distant'}</Button>
         </>
       )}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </fieldset>
   )
 }
