@@ -9,3 +9,4 @@ Le backlog est local au dépôt. Les fiches Markdown de `tickets/` sont ignorée
 | 3 · PWA et récupération | PANI-10 à PANI-15 | Installation iPhone, relance hors ligne et restauration des sauvegardes chiffrées. |
 | 4 · Recette et livraison | PANI-16 à PANI-18 | Tests automatisés, validation sur iPhone et publication Vercel. |
 | Ajustements UX | PANI-19 | Navigation inférieure, quantités, gestes, personnalisation des catégories et annulation. |
+| Ajustements UX | PANI-20 | Fenêtre de catégorie, couleurs de fond, listes ouvertes et fermeture du menu par balayage. |

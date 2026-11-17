@@ -1,12 +1,12 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowDown, ArrowUp, Cloud, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
 import { BottomNav } from './components/BottomNav'
 import { CategoryEditor } from './components/CategoryEditor'
-import { CategoryLabel } from './components/CategoryLabel'
+import { categoryBackground, CategoryLabel } from './components/CategoryLabel'
 import { ItemEditor } from './components/ItemEditor'
 import { QuantityStepper } from './components/QuantityStepper'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
@@ -28,8 +28,6 @@ export function App() {
   const [announcement, setAnnouncement] = useState('')
   const [error, setError] = useState('')
   const [backupOpen, setBackupOpen] = useState(false)
-  const [searching, setSearching] = useState(false)
-  const focusSearch = useCallback((node: HTMLInputElement | null) => { node?.focus() }, [])
   const [query, setQuery] = useState('')
   const [openMenu, setOpenMenu] = useState<string>()
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
@@ -69,25 +67,10 @@ export function App() {
     }, 'Impossible de supprimer cet article.')
   }
 
-  function closeSearch() {
-    setSearching(false)
-    setQuery('')
-  }
-
   async function switchMode(next: Mode) {
     setOpenMenu(undefined)
-    if (next !== 'list') closeSearch()
+    if (next !== 'list') setQuery('')
     await run(() => database.setMode(next), 'Impossible de changer de vue. Réessayez.')
-  }
-
-  function toggleSearch() {
-    if (searching && mode === 'list') {
-      closeSearch()
-    } else {
-      setSearching(true)
-      setOpenMenu(undefined)
-      if (mode !== 'list') void switchMode('list')
-    }
   }
 
   return (
@@ -115,24 +98,17 @@ export function App() {
         {result?.list && mode === 'list' && (
           <>
             <div className="list-toolbar">
-              {searching && (
-                <div className="flex min-w-0 flex-1 items-center gap-1">
-                  <input
-                    ref={focusSearch}
-                    type="search"
-                    className="pani-input w-full min-w-0"
-                    aria-label="Rechercher un article"
-                    placeholder="Rechercher un article"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === 'Escape') closeSearch() }}
-                  />
-                  <Button aria-label="Fermer la recherche" variant="ghost" className="px-2" onClick={closeSearch}><X size={18} /></Button>
-                </div>
-              )}
-              <Button id="add-item" aria-label="Ajouter un article" onClick={() => { setOpenMenu(undefined); setEditor({ item: null }) }}>
-                <Plus size={18} />
-                {!searching && 'Ajouter un article'}
+              <input
+                type="search"
+                className="pani-input min-w-0 flex-1"
+                aria-label="Rechercher un article"
+                placeholder="Rechercher"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
+              />
+              <Button id="add-item" aria-label="Ajouter un article" className="px-2.5" onClick={() => { setOpenMenu(undefined); setEditor({ item: null }) }}>
+                <Plus size={20} />
               </Button>
             </div>
             {!groups.length && <p className="empty-group">Aucun résultat.</p>}
@@ -149,7 +125,7 @@ export function App() {
             }}>
               {groups.map(({ category, items: groupItems }) => (
                 <CategoryDrop key={category?.id ?? 'none'} id={`category:${category?.id ?? ''}`}>
-                  <h2 className="category-heading"><CategoryLabel category={category} /></h2>
+                  <h2 className="category-heading" style={categoryBackground(category)}><CategoryLabel category={category} /></h2>
                   {groupItems.length === 0 && (
                     <p className="empty-group">{!category && !items.length ? 'Votre liste est vide.' : 'Aucun article'}</p>
                   )}
@@ -201,7 +177,7 @@ export function App() {
         )}
         {backupOpen && <BackupPanel cloud={cloud} hasData={items.length + categories.length > 0} onClose={() => setBackupOpen(false)} />}
       </main>
-      <BottomNav mode={mode} searching={searching} disabled={!result?.list} onNavigate={(next) => void switchMode(next)} onSearch={toggleSearch} />
+      <BottomNav mode={mode} disabled={!result?.list} onNavigate={(next) => void switchMode(next)} />
     </>
   )
 }

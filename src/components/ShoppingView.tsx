@@ -117,7 +117,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
         </div>
       )}
       {error && <p role="alert">{error}</p>}
-      {pending.length === 0 && <p className="rounded-lg bg-card p-5">
+      {pending.length === 0 && <p className="empty-group">
         {checked.length ? 'Courses terminées.' : 'Aucun article à acheter.'}
       </p>}
       {groups.map(({ category, items }) => (
@@ -129,7 +129,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
         </section>
       ))}
       {checked.length > 0 && (
-        <details className="mt-6 rounded-lg bg-card p-3">
+        <details className="mt-6 px-3">
           <summary id="checked-items" className="min-h-11 cursor-pointer py-2 font-semibold">Articles pris ({checked.length})</summary>
           <ul className="mb-3 divide-y divide-muted">
             {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}

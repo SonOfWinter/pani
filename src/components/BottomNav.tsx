@@ -1,4 +1,4 @@
-import { List, Search, ShoppingCart, Tags } from 'lucide-react'
+import { List, ShoppingCart, Tags } from 'lucide-react'
 import type { Mode } from '../data/database'
 
 const tabs = [
@@ -7,12 +7,10 @@ const tabs = [
   { mode: 'categories', label: 'Catégories', Icon: Tags },
 ] as const
 
-export function BottomNav({ mode, searching, disabled, onNavigate, onSearch }: {
+export function BottomNav({ mode, disabled, onNavigate }: {
   mode: Mode
-  searching: boolean
   disabled: boolean
   onNavigate: (mode: Mode) => void
-  onSearch: () => void
 }) {
   return (
     <nav className="bottom-nav" aria-label="Navigation principale">
@@ -29,9 +27,6 @@ export function BottomNav({ mode, searching, disabled, onNavigate, onSearch }: {
             <span>{label}</span>
           </button>
         ))}
-        <button type="button" aria-label="Rechercher" aria-expanded={searching} disabled={disabled} onClick={onSearch}>
-          <Search size={21} aria-hidden="true" />
-        </button>
       </div>
     </nav>
   )

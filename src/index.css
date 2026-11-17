@@ -95,20 +95,19 @@
 }
 
 .bottom-nav-inner {
-  @apply mx-auto grid max-w-xl grid-cols-[1fr_1fr_1fr_3.25rem] gap-1 px-3 py-2;
+  @apply mx-auto grid max-w-xl grid-cols-3 gap-1 px-3 py-2;
 }
 
 .bottom-nav button {
   @apply flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-medium text-muted-foreground;
 }
 
-.bottom-nav button[aria-pressed="true"],
-.bottom-nav button[aria-expanded="true"] {
+.bottom-nav button[aria-pressed="true"] {
   @apply bg-muted text-foreground;
 }
 
 .list-group {
-  @apply mb-4 rounded-lg border border-border bg-card;
+  @apply mb-4;
 }
 
 .list-group.is-over {
@@ -116,11 +115,7 @@
 }
 
 .category-heading {
-  @apply flex items-center gap-2 border-b border-border px-3 py-2.5 text-sm font-semibold;
-}
-
-.category-dot {
-  @apply size-2.5 shrink-0 rounded-full ring-1 ring-foreground/20;
+  @apply flex items-center gap-2 px-3 py-2.5 text-sm font-semibold;
 }
 
 .color-picker {
@@ -147,8 +142,11 @@
   @apply relative flex min-h-14 items-center gap-1 bg-card py-1 pr-2;
 }
 
-.swipe-content {
+.swipe-row {
   touch-action: pan-y;
+}
+
+.swipe-content {
   transition: transform 180ms ease-out;
 }
 
@@ -197,4 +195,15 @@
   .sortable-row {
     transition: none !important;
   }
+}
+
+.category-dialog {
+  @apply fixed inset-0 m-auto max-w-md rounded-2xl bg-card p-5 text-foreground shadow-lg;
+  width: calc(100% - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+
+.category-dialog::backdrop {
+  background: rgb(0 0 0 / 48%);
 }

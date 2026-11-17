@@ -5,7 +5,7 @@ import {
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Ellipsis, GripVertical } from 'lucide-react'
-import { useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 
 export function Reorder({ children, onDrop }: {
   children: ReactNode
@@ -53,28 +53,31 @@ export function Reorder({ children, onDrop }: {
   )
 }
 
-export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, children }: {
+export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, appearance, children }: {
   id: string
   label: string
   disabled?: boolean
   menu?: ReactNode
   menuOpen?: boolean
   onMenuChange?: (open: boolean) => void
+  appearance?: CSSProperties
   children: ReactNode
 }) {
+  const suppressClick = useRef(false)
   const gesture = useRef<{ id: number; x: number; y: number; locked: boolean } | null>(null)
   const [slide, setSlide] = useState<number>()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({ id, disabled, data: { label } })
   const menuWidth = 220
 
-  function beginSwipe(event: PointerEvent<HTMLDivElement>) {
-    if (!menu || !event.isPrimary || event.button !== 0 ||
-      !(event.target instanceof Element) || event.target.closest('button, input, select, a')) return
+  function beginSwipe(event: PointerEvent<HTMLLIElement>) {
+    suppressClick.current = false
+    if (!menu || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
+    if (!menuOpen && event.target.closest('button, input, select, a')) return
     gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, locked: false }
   }
 
-  function moveSwipe(event: PointerEvent<HTMLDivElement>) {
+  function moveSwipe(event: PointerEvent<HTMLLIElement>) {
     const start = gesture.current
     if (!start || start.id !== event.pointerId) return
     const dx = event.clientX - start.x
@@ -86,12 +89,13 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       }
       if (Math.abs(dx) < 9 || Math.abs(dx) <= dy) return
       start.locked = true
+      suppressClick.current = true
       event.currentTarget.setPointerCapture(event.pointerId)
     }
     setSlide(Math.max(-menuWidth, Math.min(0, (menuOpen ? -menuWidth : 0) + dx)))
   }
 
-  function finishSwipe(event: PointerEvent<HTMLDivElement>) {
+  function finishSwipe(event: PointerEvent<HTMLLIElement>) {
     const start = gesture.current
     if (start?.id !== event.pointerId) return
     gesture.current = null
@@ -106,10 +110,21 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
     <li
       ref={setNodeRef}
       style={{ transform: isDragging ? undefined : CSS.Translate.toString(transform), transition }}
+      onPointerDown={beginSwipe}
+      onPointerMove={moveSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={() => { gesture.current = null; setSlide(undefined) }}
+      onPointerLeave={() => { if (!gesture.current?.locked) gesture.current = null }}
+      onClickCapture={(event) => {
+        if (!suppressClick.current || event.detail === 0) return
+        suppressClick.current = false
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && menuOpen) onMenuChange?.(false)
       }}
-      className={`sortable-row ${isDragging ? 'is-dragging' : ''} ${isOver && !isDragging ? 'is-over' : ''}`}
+      className={`sortable-row ${menu ? 'swipe-row' : ''} ${isDragging ? 'is-dragging' : ''} ${isOver && !isDragging ? 'is-over' : ''}`}
     >
       {menu && (
         <div id={`actions-${id}`} className="swipe-menu" inert={!menuOpen} aria-hidden={!menuOpen}>
@@ -119,20 +134,17 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       <div
         className={`row-content ${menu ? 'swipe-content' : ''}`}
         style={{
+          ...appearance,
           transform: menu ? `translateX(${slide ?? (menuOpen ? -menuWidth : 0)}px)` : undefined,
           transition: slide !== undefined ? 'none' : undefined,
         }}
-        onPointerDown={beginSwipe}
-        onPointerMove={moveSwipe}
-        onPointerUp={finishSwipe}
-        onPointerCancel={() => { gesture.current = null; setSlide(undefined) }}
-        onPointerLeave={() => { if (!gesture.current?.locked) gesture.current = null }}
       >
         {!disabled && (
           <button
             type="button"
             ref={setActivatorNodeRef}
             className="row-icon touch-none"
+            style={appearance ? { color: 'inherit' } : undefined}
             {...attributes}
             {...listeners}
             aria-label={`Déplacer ${label}`}
