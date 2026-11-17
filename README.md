@@ -13,7 +13,7 @@ npm test
 npm run build
 ```
 
-Ces vérifications sont aussi configurées dans GitHub Actions.
+Ces vérifications sont aussi configurées dans GitHub Actions. Pour la recette navigateur, lancer `npx playwright install chromium webkit`, puis `npm run build` et `npm run test:e2e`. Pour activer le cloud et tester l’isolation des comptes, voir [la configuration Supabase](supabase/README.md).
 
 ## Documentation
 
