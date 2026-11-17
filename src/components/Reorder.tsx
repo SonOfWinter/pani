@@ -4,7 +4,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, ShoppingCart } from 'lucide-react'
+import { GripVertical, ShoppingBasket } from 'lucide-react'
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 
 const verticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
@@ -78,7 +78,8 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
   const [slide, setSlide] = useState<number>()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({ id, disabled, data: { label } })
-  const menuWidth = 132
+  const menuWidth = 144
+  const basketWidth = 44
   const coloredRow = Boolean(appearance)
 
   function beginSwipe(event: PointerEvent<HTMLLIElement>) {
@@ -103,7 +104,7 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       suppressClick.current = true
       event.currentTarget.setPointerCapture(event.pointerId)
     }
-    const rightLimit = !menuOpen && onSwipeRight ? menuWidth : 0
+    const rightLimit = !menuOpen && onSwipeRight ? basketWidth : 0
     setSlide(Math.max(-menuWidth, Math.min(rightLimit, (menuOpen ? -menuWidth : 0) + dx)))
   }
 
@@ -146,14 +147,15 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       className={`sortable-row ${menu ? 'swipe-row' : ''} ${!coloredRow && isDragging ? 'is-dragging' : ''} ${!coloredRow && isOver && !isDragging ? 'is-over' : ''}`}
     >
       {menu && (
-        <div id={`actions-${id}`} className="swipe-menu" inert={!menuOpen} aria-hidden={!menuOpen}>
+        <div id={`actions-${id}`} className="swipe-menu" style={{ width: menuWidth }} inert={!menuOpen} aria-hidden={!menuOpen}>
           {menu}
         </div>
       )}
       {onSwipeRight && slide !== undefined && slide > 0 && (
-        <div className="absolute inset-y-0 left-0 flex w-[132px] items-center gap-2 bg-muted px-3 text-xs font-medium" aria-hidden="true">
-          <ShoppingCart size={18} className="shrink-0" />
-          Ajouter aux courses
+        <div className="absolute inset-y-0 left-0 flex items-center" aria-hidden="true">
+          <div className="swipe-basket" style={{ width: basketWidth }}>
+            <ShoppingBasket size={19} />
+          </div>
         </div>
       )}
       <div
