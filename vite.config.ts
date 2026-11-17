@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['icon-180.png'],
+      includeAssets: ['icon-180-v2.png'],
       manifest: {
         name: 'Pani',
         short_name: 'Pani',
@@ -21,8 +21,8 @@ export default defineConfig({
         background_color: '#000000',
         theme_color: '#000000',
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icon-192-v2.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512-v2.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {
