@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --color-category-green: var(--category-green);
+  --color-category-amber: var(--category-amber);
+  --color-category-blue: var(--category-blue);
+  --color-category-rose: var(--category-rose);
+  --radius-lg: 0.875rem;
+}
+
+:root {
+  color-scheme: light dark;
+  --background: #faf8f2;
+  --foreground: #242a24;
+  --card: #ffffff;
+  --muted: #eeeae0;
+  --muted-foreground: #51594f;
+  --border: #848b7e;
+  --primary: #3d634d;
+  --primary-foreground: #ffffff;
+  --destructive: #a12d35;
+  --destructive-foreground: #ffffff;
+  --ring: #325943;
+  --category-green: #dcead8;
+  --category-amber: #f4e4bc;
+  --category-blue: #dde8f5;
+  --category-rose: #f3dfe4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1d211e;
+    --foreground: #f2f3ed;
+    --card: #262d28;
+    --muted: #353e37;
+    --muted-foreground: #bec8bf;
+    --border: #89958b;
+    --primary: #bfdac2;
+    --primary-foreground: #1e3828;
+    --destructive: #f5a7ad;
+    --destructive-foreground: #52171c;
+    --ring: #c1e0c4;
+    --category-green: #324939;
+    --category-amber: #4c3e27;
+    --category-blue: #384759;
+    --category-rose: #503a43;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background font-sans text-foreground;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
