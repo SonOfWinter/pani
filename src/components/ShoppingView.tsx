@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { Category, Item } from '../data/database'
 import { Undo2 } from 'lucide-react'
 import { QuantityStepper } from './QuantityStepper'
-import { CategoryLabel } from './CategoryLabel'
+import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { changeQuantity, deleteCheckedItems, setItemChecked } from '../data/items'
 import { Button } from './ui/button'
 
@@ -122,7 +122,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
       </p>}
       {groups.map(({ category, items }) => (
         <section key={category?.id ?? 'none'} className="list-group">
-          <h2 className="category-heading"><CategoryLabel category={category} /></h2>
+          <h2 className="category-heading" style={categoryBackground(category)}><CategoryLabel category={category} /></h2>
           <ul className="divide-y divide-border">
             {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
           </ul>

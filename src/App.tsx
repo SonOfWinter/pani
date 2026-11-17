@@ -1,6 +1,6 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowDown, ArrowUp, Cloud, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Cloud, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
@@ -131,7 +131,7 @@ export function App() {
                   )}
                   <SortableContext items={groupItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                     <ul className="divide-y divide-border">
-                      {groupItems.map((item, index) => (
+                      {groupItems.map((item) => (
                         <SortableRow
                           key={item.id}
                           id={item.id}
@@ -142,16 +142,31 @@ export function App() {
                           menu={
                             <>
                               <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
-                              {!term && <>
-                                <button type="button" aria-label={`Monter ${item.name}`} disabled={!index} onClick={() => void reorder(item, { direction: -1 })}><ArrowUp size={18} /></button>
-                                <button type="button" aria-label={`Descendre ${item.name}`} disabled={index === groupItems.length - 1} onClick={() => void reorder(item, { direction: 1 })}><ArrowDown size={18} /></button>
-                              </>}
                               <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
                               <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
                             </>
                           }
                         >
-                          <p className="min-w-0 flex-1 break-words font-medium">{item.name}</p>
+                          <button
+                            type="button"
+                            data-swipe-trigger
+                            className="min-h-11 min-w-0 flex-1 break-words text-left"
+                            aria-label={`Actions pour ${item.name}`}
+                            aria-expanded={openMenu === item.id}
+                            aria-controls={`actions-${item.id}`}
+                            onClick={(event) => {
+                              const open = openMenu !== item.id
+                              setOpenMenu(open ? item.id : undefined)
+                              if (open && event.detail === 0) {
+                                requestAnimationFrame(() => document
+                                  .getElementById(`actions-${item.id}`)
+                                  ?.querySelector('button')
+                                  ?.focus({ preventScroll: true }))
+                              }
+                            }}
+                          >
+                            {item.name}
+                          </button>
                           <QuantityStepper item={item} onChange={(delta) => void run(
                             () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
                           )} />

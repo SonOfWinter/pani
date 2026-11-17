@@ -4,12 +4,13 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Ellipsis, GripVertical } from 'lucide-react'
+import { GripVertical } from 'lucide-react'
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 
-export function Reorder({ children, onDrop }: {
+export function Reorder({ children, onDrop, showPreview = true }: {
   children: ReactNode
   onDrop: (event: DragEndEvent) => void
+  showPreview?: boolean
 }) {
   const [label, setLabel] = useState<string>()
   const sensors = useSensors(
@@ -46,9 +47,11 @@ export function Reorder({ children, onDrop }: {
       }}
     >
       {children}
-      <DragOverlay dropAnimation={null}>
-        {label && <div className="drag-preview"><GripVertical size={18} />{label}</div>}
-      </DragOverlay>
+      {showPreview && (
+        <DragOverlay dropAnimation={null}>
+          {label && <div className="drag-preview"><GripVertical size={18} />{label}</div>}
+        </DragOverlay>
+      )}
     </DndContext>
   )
 }
@@ -68,12 +71,13 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
   const [slide, setSlide] = useState<number>()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({ id, disabled, data: { label } })
-  const menuWidth = 220
+  const menuWidth = 132
+  const coloredRow = Boolean(appearance)
 
   function beginSwipe(event: PointerEvent<HTMLLIElement>) {
     suppressClick.current = false
     if (!menu || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
-    if (!menuOpen && event.target.closest('button, input, select, a')) return
+    if (!menuOpen && event.target.closest('button:not([data-swipe-trigger]), input, select, a')) return
     gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, locked: false }
   }
 
@@ -109,7 +113,11 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
   return (
     <li
       ref={setNodeRef}
-      style={{ transform: isDragging ? undefined : CSS.Translate.toString(transform), transition }}
+      style={{
+        transform: !isDragging || coloredRow ? CSS.Translate.toString(transform) : undefined,
+        transition,
+        zIndex: coloredRow && isDragging ? 1 : undefined,
+      }}
       onPointerDown={beginSwipe}
       onPointerMove={moveSwipe}
       onPointerUp={finishSwipe}
@@ -124,7 +132,7 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       onKeyDown={(event) => {
         if (event.key === 'Escape' && menuOpen) onMenuChange?.(false)
       }}
-      className={`sortable-row ${menu ? 'swipe-row' : ''} ${isDragging ? 'is-dragging' : ''} ${isOver && !isDragging ? 'is-over' : ''}`}
+      className={`sortable-row ${menu ? 'swipe-row' : ''} ${!coloredRow && isDragging ? 'is-dragging' : ''} ${!coloredRow && isOver && !isDragging ? 'is-over' : ''}`}
     >
       {menu && (
         <div id={`actions-${id}`} className="swipe-menu" inert={!menuOpen} aria-hidden={!menuOpen}>
@@ -150,18 +158,6 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
             aria-label={`Déplacer ${label}`}
           >
             <GripVertical size={19} />
-          </button>
-        )}
-        {menu && (
-          <button
-            type="button"
-            className="row-icon"
-            aria-label={`Actions pour ${label}`}
-            aria-expanded={menuOpen}
-            aria-controls={`actions-${id}`}
-            onClick={() => onMenuChange?.(!menuOpen)}
-          >
-            <Ellipsis size={18} />
           </button>
         )}
         {children}

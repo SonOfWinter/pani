@@ -2,7 +2,7 @@
 
 ## Identité
 
-Soft Native reprend les habitudes iPhone. Fond blanc, texte noir et surfaces gris légèrement émeraude. Le fond des lignes de catégories et des en-têtes de Liste reprend leur couleur. Le nom et l’emoji restent lisibles grâce à un texte noir ou blanc selon le contraste. Les listes se composent de lignes séparées, sans encadrement de section. Le thème sombre suit le système. Les séparateurs sont fins et la police suit le système. Les couleurs, espacements, rayons et états de focus passent par des variables CSS. Écarter les motifs Material Design.
+Soft Native reprend les habitudes iPhone. Fond blanc, texte noir et surfaces gris légèrement émeraude. Le fond des lignes de catégories et des en-têtes de Liste et Courses reprend leur couleur. Le nom et l’emoji restent lisibles grâce à un texte noir ou blanc selon le contraste. Les listes se composent de lignes séparées, sans encadrement de section. Le thème sombre suit le système. Les séparateurs sont fins et la police suit le système. Les couleurs, espacements, rayons et états de focus passent par des variables CSS. Écarter les motifs Material Design.
 
 ## Écrans et gestes
 
@@ -14,7 +14,7 @@ Soft Native reprend les habitudes iPhone. Fond blanc, texte noir et surfaces gri
 | Sauvegarde | Montrer le dernier succès et l’état courant. Expliquer la différence entre compte et phrase de récupération. Pour restaurer, afficher un aperçu après déchiffrement, puis demander de confirmer le remplacement local. |
 
 - La barre inférieure fixe donne accès à Liste, Courses et Catégories.
-- En Liste, faire glisser une ligne vers la gauche la décale pour révéler les actions derrière elle. Glisser vers la droite referme les actions. Le geste seul n’efface rien. Un défilement vertical garde la priorité. Le menu de ligne donne accès aux mêmes actions.
-- Le déplacement démarre depuis une poignée dédiée. Déposer un article sur une ligne ou dans une section, même vide. Relâcher hors cible ou annuler conserve l’ordre initial. Le menu propose Monter et Descendre. L’édition de l’article permet de changer de catégorie, y compris pendant une recherche.
+- En Liste, faire glisser une ligne vers la gauche la décale pour révéler les actions derrière elle. Glisser vers la droite referme les actions. Le geste seul n’efface rien. Un défilement vertical garde la priorité. Toucher le nom de l’article donne aussi accès aux actions.
+- Le déplacement démarre depuis une poignée dédiée. Déposer un article sur une ligne ou dans une section, même vide. Relâcher hors cible ou annuler conserve l’ordre initial. L’édition de l’article permet de changer de catégorie, y compris pendant une recherche.
 - Prévoir les états liste vide, aucun résultat, courses terminées, erreur d’écriture et sauvegarde indisponible. Une erreur d’écriture conserve la saisie pour réessayer. Hors ligne, les commandes locales restent disponibles.
 - Cibles tactiles d’au moins 44 × 44 pixels CSS, libellés VoiceOver, focus visible, contraste WCAG AA, zoom, zones sûres iOS et mouvements réduits. Après déplacement ou coche, annoncer le résultat aux technologies d’assistance et maintenir un focus logique.
