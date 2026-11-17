@@ -10,7 +10,7 @@ export interface Item {
   quantity: string
   categoryId: string | null
   position: number
-  checkedAt: string | null
+  shopping?: { quantity: string; checkedAt: string | null }
   createdAt: string
   updatedAt: string
 }
@@ -58,6 +58,12 @@ export class PaniDatabase extends Dexie {
       categories: 'id, &normalizedName, position',
       state: 'id',
     })
+    this.version(2).stores({}).upgrade((transaction) =>
+      transaction.table<Item & { checkedAt?: string | null }>('items').toCollection().modify((item) => {
+        item.shopping = { quantity: item.quantity, checkedAt: item.checkedAt ?? null }
+        delete item.checkedAt
+      }),
+    )
   }
 
   async readState(): Promise<LocalState> {
@@ -71,11 +77,13 @@ export class PaniDatabase extends Dexie {
     })
   }
 
-  async mutate<Result>(write: () => Promise<Result>): Promise<Result> {
+  async mutate<Result>(write: () => Promise<Result>, changed: (result: Result) => boolean = () => true): Promise<Result> {
     return this.transaction('rw', [this.items, this.categories, this.state], async () => {
       const result = await write()
-      const state = await this.readState()
-      await this.state.put({ ...state, revision: state.revision + 1 })
+      if (changed(result)) {
+        const state = await this.readState()
+        await this.state.put({ ...state, revision: state.revision + 1 })
+      }
       return result
     })
   }

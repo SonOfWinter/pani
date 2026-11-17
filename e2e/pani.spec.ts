@@ -9,6 +9,19 @@ async function addItem(page: Page, name: string, quantity = '') {
   await expect(form).toBeHidden()
 }
 
+async function swipeIntoShopping(page: Page, name: string) {
+  const item = page.getByRole('button', { name: `Actions pour ${name}` })
+  await expect(item).toBeVisible()
+  const box = await item.boundingBox()
+  if (!box) throw new Error('Article introuvable.')
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 70, y, { steps: 12 })
+  await page.mouse.up()
+}
+
 test('prépare les achats puis termine ses courses après une relance hors ligne', async ({ page, context }) => {
   await page.goto('/')
   await addItem(page, 'Tomates', '500 g')
@@ -18,6 +31,15 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await expect(page.getByText('Riz', { exact: true })).toBeHidden()
   await page.getByRole('searchbox').fill('')
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  await expect(page.getByRole('checkbox')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await swipeIntoShopping(page, 'Tomates')
+  await swipeIntoShopping(page, 'Tomates')
+  await swipeIntoShopping(page, 'Riz')
+  await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  await expect(page.getByRole('checkbox')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Augmenter la quantité de Tomates' }).click()
+  await expect(page.getByRole('group', { name: 'Quantité de Tomates' }).locator('output')).toHaveText('501 g')
   await page.getByRole('checkbox', { name: /Tomates/ }).click()
   await expect(page.getByText('1 article à acheter', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Annuler', exact: true }).click()
@@ -48,13 +70,25 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await page.getByRole('button', { name: 'Liste', exact: true }).click()
   await expect(page.getByText('Tomates', { exact: true })).toBeVisible()
   await expect(page.getByText('500 g', { exact: true })).toBeVisible()
-  await expect(page.getByText('Riz', { exact: true })).toBeHidden()
+  await expect(page.getByText('Riz', { exact: true })).toBeVisible()
+  await swipeIntoShopping(page, 'Riz')
+  await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Riz' }).click()
+  await expect(page.getByText('Articles pris (1)', { exact: true })).toBeVisible()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Vider les courses' }).click()
+  await expect(page.getByRole('checkbox')).toHaveCount(0)
+  await expect(page.getByText('Articles pris (1)', { exact: true })).toBeHidden()
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await expect(page.getByText('Riz', { exact: true })).toBeVisible()
+  await expect(page.getByText('Tomates', { exact: true })).toBeVisible()
 })
 
 test('restaure un export chiffré dans une installation vierge', async ({ page, browser }, testInfo) => {
   const phrase = 'phrase réservée au test de restauration'
   await page.goto('/')
   await addItem(page, 'Pommes', '6')
+  await swipeIntoShopping(page, 'Pommes')
   await page.getByRole('button', { name: 'Sauvegardes', exact: true }).click()
   await page.getByLabel('Phrase de récupération', { exact: true }).fill(phrase)
   await page.getByLabel('Confirmer la phrase pour exporter').fill(phrase)
@@ -80,6 +114,8 @@ test('restaure un export chiffré dans une installation vierge', async ({ page, 
     await expect(newPage.getByText('Sauvegarde restaurée.')).toBeVisible()
     await newPage.getByRole('button', { name: 'Fermer', exact: true }).click()
     await expect(newPage.getByText('Pommes', { exact: true })).toBeVisible()
+    await newPage.getByRole('button', { name: 'Courses', exact: true }).click()
+    await expect(newPage.getByRole('checkbox', { name: 'Pommes' })).toBeVisible()
   } finally {
     await newPage.close()
   }
@@ -166,6 +202,7 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await expect(category.getByText('🍇', { exact: true })).toBeVisible()
   await page.reload()
   await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
+  await swipeIntoShopping(page, 'Pommes')
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Fruits', exact: true })).toHaveCSS('background-color', 'rgb(0, 136, 119)')
 })

@@ -29,7 +29,6 @@ export async function saveItem(name: string, quantity: string, categoryId: strin
       name: cleanName,
       quantity: quantity.trim(),
       categoryId,
-      checkedAt: null,
       position,
       createdAt: updatedAt,
       updatedAt,
@@ -51,33 +50,52 @@ export function quantityParts(quantity: string) {
   }
 }
 
-export async function changeQuantity(id: string, delta: -1 | 1) {
+export async function changeQuantity(id: string, delta: -1 | 1, shopping = false) {
   await database.mutate(async () => {
     const item = await database.items.get(id)
     if (!item) throw new Error('Cet article a été supprimé.')
-    const { count, suffix } = quantityParts(item.quantity)
+    const entry = shopping ? item.shopping : item
+    if (!entry) throw new Error('Cet article a été retiré des courses.')
+    const { count, suffix } = quantityParts(entry.quantity)
     if (delta < 0 && count <= 1) return
     const next = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, count + delta))
     const quantity = String(next).replace('.', ',') + suffix
-    await database.items.put({ ...item, quantity, updatedAt: new Date().toISOString() })
+    if (shopping && item.shopping) {
+      await database.items.update(id, { shopping: { ...item.shopping, quantity } })
+    } else {
+      await database.items.update(id, { quantity, updatedAt: new Date().toISOString() })
+    }
   })
+}
+
+export async function addToShopping(id: string) {
+  return database.mutate(async () => {
+    const item = await database.items.get(id)
+    if (!item || item.shopping) return false
+    await database.items.update(id, { shopping: { quantity: item.quantity, checkedAt: null } })
+    return true
+  }, Boolean)
 }
 
 export async function setItemChecked(id: string, checked: boolean, expected: string | null) {
   return database.mutate(async () => {
     const item = await database.items.get(id)
-    if (!item) throw new Error('Cet article a été supprimé.')
-    if (item.checkedAt !== expected) return item.checkedAt
-    const updatedAt = new Date().toISOString()
-    const checkedAt = checked ? updatedAt : null
-    await database.items.put({ ...item, checkedAt, updatedAt })
+    if (!item?.shopping) throw new Error('Cet article a été retiré des courses.')
+    if (item.shopping.checkedAt !== expected) return item.shopping.checkedAt
+    const checkedAt = checked ? new Date().toISOString() : null
+    await database.items.update(id, { shopping: { ...item.shopping, checkedAt } })
     return checkedAt
   })
 }
 
-export async function deleteCheckedItems(ids: string[]) {
-  await database.mutate(async () => {
-    const items = await database.items.bulkGet(ids)
-    await database.items.bulkDelete(items.flatMap((item) => item?.checkedAt ? [item.id] : []))
-  })
+export async function clearShopping(checkedIds?: string[]) {
+  return database.mutate(async () => {
+    const items = checkedIds
+      ? (await database.items.bulkGet(checkedIds)).filter((item) => item?.shopping?.checkedAt)
+      : await database.items.filter((item) => item.shopping !== undefined).toArray()
+    for (const item of items) {
+      if (item) await database.items.update(item.id, { shopping: undefined })
+    }
+    return items.length > 0
+  }, Boolean)
 }

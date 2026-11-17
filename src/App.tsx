@@ -13,7 +13,7 @@ import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
 import { ShoppingView } from './components/ShoppingView'
 import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
-import { changeQuantity, deleteItem } from './data/items'
+import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
 import { moveItem } from './data/order'
 
 export function App() {
@@ -35,7 +35,10 @@ export function App() {
   const items = result?.list?.items ?? []
   const categories = result?.list?.categories ?? []
   const mode = result?.list?.state.mode ?? 'list'
-  const remaining = items.filter((item) => item.checkedAt === null).length
+  const shoppingItems = items.flatMap((item) => item.shopping
+    ? [{ ...item, quantity: item.shopping.quantity, checkedAt: item.shopping.checkedAt }]
+    : [])
+  const remaining = shoppingItems.filter((item) => item.checkedAt === null).length
   const term = query.trim().toLocaleLowerCase('fr')
   const matching = term ? items.filter((item) => item.name.toLocaleLowerCase('fr').includes(term)) : items
   const groups = [...categories, null].map((category) => ({
@@ -51,6 +54,17 @@ export function App() {
     } catch {
       setError(failure)
     }
+  }
+
+  async function addPurchase(item: Item) {
+    await run(async () => {
+      if (await addToShopping(item.id)) setAnnouncement(`${item.name} ajouté aux courses.`)
+    }, 'Impossible d’ajouter cet article aux courses.')
+  }
+
+  function emptyShopping() {
+    if (!window.confirm('Vider toute la liste de courses ?')) return
+    void run(() => clearShopping(), 'Impossible de vider les courses.', 'Liste de courses vidée.')
   }
 
   function reorder(item: Item, destination: Parameters<typeof moveItem>[1]) {
@@ -81,20 +95,29 @@ export function App() {
             <h1>{mode === 'list' ? 'Liste' : mode === 'shopping' ? 'Courses' : 'Catégories'}</h1>
             {mode !== 'categories' && (
               <p className="text-sm text-muted-foreground" aria-live="polite">
-                {remaining} {remaining === 1 ? 'article à acheter' : 'articles à acheter'}
+                {mode === 'shopping'
+                  ? `${remaining} ${remaining === 1 ? 'article à acheter' : 'articles à acheter'}`
+                  : `${items.length} ${items.length === 1 ? 'article' : 'articles'}`}
               </p>
             )}
           </div>
-          <Button variant="ghost" className="px-2" aria-label="Sauvegardes" disabled={!result?.list} onClick={() => setBackupOpen(true)}>
-            <Cloud size={21} />
-          </Button>
+          <div className="flex">
+            {mode === 'shopping' && (
+              <Button variant="ghost" className="px-2" aria-label="Vider les courses" disabled={!shoppingItems.length} onClick={emptyShopping}>
+                <Trash2 size={21} />
+              </Button>
+            )}
+            <Button variant="ghost" className="px-2" aria-label="Sauvegardes" disabled={!result?.list} onClick={() => setBackupOpen(true)}>
+              <Cloud size={21} />
+            </Button>
+          </div>
         </header>
         <p role="status" className="sr-only">{announcement}</p>
         {error && <p role="alert">{error}</p>}
         {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
         {!result && <p role="status">Ouverture de la liste…</p>}
         {result?.list && mode === 'categories' && <CategoryEditor categories={categories} />}
-        {result?.list && mode === 'shopping' && <ShoppingView items={items} categories={categories} />}
+        {result?.list && mode === 'shopping' && <ShoppingView items={shoppingItems} categories={categories} />}
         {result?.list && mode === 'list' && (
           <>
             <div className="list-toolbar">
@@ -138,6 +161,7 @@ export function App() {
                           label={item.name}
                           disabled={Boolean(term)}
                           menuOpen={openMenu === item.id}
+                          onSwipeRight={item.shopping ? undefined : () => void addPurchase(item)}
                           onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
                           menu={
                             <>
@@ -154,6 +178,12 @@ export function App() {
                             aria-label={`Actions pour ${item.name}`}
                             aria-expanded={openMenu === item.id}
                             aria-controls={`actions-${item.id}`}
+                            aria-keyshortcuts={item.shopping ? undefined : 'Alt+ArrowRight'}
+                            onKeyDown={(event) => {
+                              if (!event.altKey || event.key !== 'ArrowRight' || item.shopping || openMenu === item.id) return
+                              event.preventDefault()
+                              void addPurchase(item)
+                            }}
                             onClick={(event) => {
                               const open = openMenu !== item.id
                               setOpenMenu(open ? item.id : undefined)

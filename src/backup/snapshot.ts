@@ -3,7 +3,7 @@ import { database, type Category, type Item } from '../data/database'
 import { decryptBackup, encryptBackup, maxEnvelopeLength } from './envelope'
 
 export interface Snapshot {
-  version: 1
+  version: 2
   date: string
   items: Item[]
   categories: Category[]
@@ -53,9 +53,23 @@ function timestamps(entry: Record<string, unknown>) {
   return { createdAt, updatedAt }
 }
 
+function parseShopping(entry: Record<string, unknown>, version: unknown): Item['shopping'] {
+  if (version === 1) {
+    requireValid(typeof entry.quantity === 'string')
+    return { quantity: entry.quantity, checkedAt: entry.checkedAt === null ? null : date(entry.checkedAt) }
+  }
+  if (entry.shopping === undefined) return undefined
+  const shopping = record(entry.shopping)
+  requireValid(typeof shopping.quantity === 'string')
+  return {
+    quantity: shopping.quantity,
+    checkedAt: shopping.checkedAt === null ? null : date(shopping.checkedAt),
+  }
+}
+
 export function validateSnapshot(value: unknown): Snapshot {
   const payload = record(value)
-  requireValid(payload.version === 1 && Array.isArray(payload.items) && Array.isArray(payload.categories))
+  requireValid((payload.version === 1 || payload.version === 2) && Array.isArray(payload.items) && Array.isArray(payload.categories))
   const categoryIds = new Set<string>()
   const normalizedNames = new Set<string>()
   const categoryPositions = new Set<number>()
@@ -96,17 +110,17 @@ export function validateSnapshot(value: unknown): Snapshot {
       quantity: entry.quantity,
       categoryId,
       position: index,
-      checkedAt: entry.checkedAt === null ? null : date(entry.checkedAt),
+      shopping: parseShopping(entry, payload.version),
       ...timestamps(entry),
     }
   })
 
-  return { version: 1, date: date(payload.date), categories, items }
+  return { version: 2, date: date(payload.date), categories, items }
 }
 
 export async function makeBackup(phrase: string) {
   const { items, categories, state } = await database.readList()
-  const snapshot: Snapshot = { version: 1, date: new Date().toISOString(), items, categories }
+  const snapshot: Snapshot = { version: 2, date: new Date().toISOString(), items, categories }
   return { revision: state.revision, text: await encryptBackup(snapshot, phrase) }
 }
 

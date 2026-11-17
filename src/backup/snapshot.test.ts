@@ -35,3 +35,12 @@ test('refuse une catégorie orpheline et restaure atomiquement une archive valid
   await restoreSnapshot(saved, revision)
   expect((await database.readList()).items).toEqual(saved.items)
 })
+
+
+test('une sauvegarde ancienne conserve ses articles dans Courses', async () => {
+  await saveItem('Farine', '500 g', null)
+  const { items, categories } = await database.readList()
+  const date = new Date().toISOString()
+  const snapshot = validateSnapshot({ version: 1, date, items: [{ ...items[0], checkedAt: date }], categories })
+  expect(snapshot.items[0].shopping).toEqual({ quantity: '500 g', checkedAt: date })
+})

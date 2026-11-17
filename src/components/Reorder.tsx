@@ -4,7 +4,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
+import { GripVertical, ShoppingCart } from 'lucide-react'
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 
 export function Reorder({ children, onDrop, showPreview = true }: {
@@ -56,13 +56,14 @@ export function Reorder({ children, onDrop, showPreview = true }: {
   )
 }
 
-export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, appearance, children }: {
+export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, onSwipeRight, appearance, children }: {
   id: string
   label: string
   disabled?: boolean
   menu?: ReactNode
   menuOpen?: boolean
   onMenuChange?: (open: boolean) => void
+  onSwipeRight?: () => void
   appearance?: CSSProperties
   children: ReactNode
 }) {
@@ -96,7 +97,8 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       suppressClick.current = true
       event.currentTarget.setPointerCapture(event.pointerId)
     }
-    setSlide(Math.max(-menuWidth, Math.min(0, (menuOpen ? -menuWidth : 0) + dx)))
+    const rightLimit = !menuOpen && onSwipeRight ? menuWidth : 0
+    setSlide(Math.max(-menuWidth, Math.min(rightLimit, (menuOpen ? -menuWidth : 0) + dx)))
   }
 
   function finishSwipe(event: PointerEvent<HTMLLIElement>) {
@@ -107,7 +109,10 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
     if (!start.locked) return
     const dx = event.clientX - start.x
     if (dx < -32) onMenuChange?.(true)
-    if (dx > 32) onMenuChange?.(false)
+    if (dx > 32) {
+      if (menuOpen) onMenuChange?.(false)
+      else onSwipeRight?.()
+    }
   }
 
   return (
@@ -137,6 +142,12 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
       {menu && (
         <div id={`actions-${id}`} className="swipe-menu" inert={!menuOpen} aria-hidden={!menuOpen}>
           {menu}
+        </div>
+      )}
+      {onSwipeRight && slide !== undefined && slide > 0 && (
+        <div className="absolute inset-y-0 left-0 flex w-[132px] items-center gap-2 bg-muted px-3 text-xs font-medium" aria-hidden="true">
+          <ShoppingCart size={18} className="shrink-0" />
+          Ajouter aux courses
         </div>
       )}
       <div

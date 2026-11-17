@@ -3,12 +3,14 @@ import type { Category, Item } from '../data/database'
 import { Undo2 } from 'lucide-react'
 import { QuantityStepper } from './QuantityStepper'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
-import { changeQuantity, deleteCheckedItems, setItemChecked } from '../data/items'
+import { changeQuantity, clearShopping, setItemChecked } from '../data/items'
 import { Button } from './ui/button'
 
+type ShoppingItem = Item & { checkedAt: string | null }
+
 function ShoppingRow({ item, onToggle, onQuantity }: {
-  item: Item
-  onToggle: (item: Item) => void
+  item: ShoppingItem
+  onToggle: (item: ShoppingItem) => void
   onQuantity: (id: string, delta: -1 | 1) => void
 }) {
   return (
@@ -30,7 +32,7 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
   )
 }
 
-export function ShoppingView({ items, categories }: { items: Item[]; categories: Category[] }) {
+export function ShoppingView({ items, categories }: { items: ShoppingItem[]; categories: Category[] }) {
   const focusAfterChange = useRef<{ id: string; destination: string } | null>(null)
   const [lastCheck, setLastCheck] = useState<{ id: string; name: string; checkedAt: string }>()
   const [error, setError] = useState('')
@@ -50,7 +52,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
     document.getElementById(target.destination)?.focus()
   }, [items])
 
-  async function toggle(item: Item) {
+  async function toggle(item: ShoppingItem) {
     const next = pending[pending.findIndex((entry) => entry.id === item.id) + 1]
     if (document.activeElement?.id === `purchase-${item.id}`) {
       const destination = item.checkedAt
@@ -72,7 +74,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
 
   async function adjustQuantity(id: string, delta: -1 | 1) {
     try {
-      await changeQuantity(id, delta)
+      await changeQuantity(id, delta, true)
       setError('')
     } catch {
       setError('Impossible de modifier la quantité.')
@@ -82,7 +84,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
   async function clearChecked() {
     if (!window.confirm('Retirer les articles pris de la liste ?')) return
     try {
-      await deleteCheckedItems(checked.map((item) => item.id))
+      await clearShopping(checked.map((item) => item.id))
       setLastCheck(undefined)
       setError('')
       setAnnouncement('Articles pris retirés.')

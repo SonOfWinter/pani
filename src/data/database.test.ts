@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, expect, test } from 'vitest'
-import { liveQuery } from 'dexie'
+import Dexie, { liveQuery } from 'dexie'
 import { PaniDatabase, type Item } from './database'
 
 let db: PaniDatabase
@@ -10,7 +10,6 @@ const item: Item = {
   quantity: '500 g',
   categoryId: null,
   position: 0,
-  checkedAt: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 }
@@ -52,4 +51,19 @@ test('observe une écriture commise sur la liste', async () => {
   })
   await db.mutate(() => db.items.add(item))
   await expect(observed).resolves.toEqual([item])
+})
+
+
+test('la migration conserve les achats préexistants et leur coche', async () => {
+  const legacy = new Dexie(db.name)
+  legacy.version(1).stores({
+    items: 'id, [categoryId+position], position',
+    categories: 'id, &normalizedName, position',
+    state: 'id',
+  })
+  await legacy.table('items').add({ ...item, checkedAt: item.updatedAt })
+  legacy.close()
+
+  const { items } = await db.readList()
+  expect(items).toEqual([{ ...item, shopping: { quantity: item.quantity, checkedAt: item.updatedAt } }])
 })
