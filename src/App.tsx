@@ -12,6 +12,7 @@ import { ItemEditor } from './components/ItemEditor'
 import { QuantityStepper } from './components/QuantityStepper'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
 import { ShoppingView } from './components/ShoppingView'
+import { useConfirm } from './components/ui/confirm'
 import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
 import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
@@ -19,6 +20,7 @@ import { animateRemoval, animateSavedItem } from './lib/list-motion'
 import { moveItem } from './data/order'
 
 export function App() {
+  const confirm = useConfirm()
   const result = useLiveQuery(async () => {
     try {
       return { list: await database.readList(), error: false as const }
@@ -63,8 +65,12 @@ export function App() {
     }, 'Impossible d’ajouter cet article aux courses.')
   }
 
-  function emptyShopping() {
-    if (!window.confirm('Vider toute la liste de courses ?')) return
+  async function emptyShopping() {
+    if (!await confirm({
+      title: 'Vider toute la liste de courses ?',
+      description: 'Les articles cochés et ceux à acheter seront retirés de Courses. Ils resteront dans Liste.',
+      action: 'Vider les courses',
+    })) return
     void run(async () => {
       await animateRemoval(shoppingItems.map((item) => document.getElementById(`shopping-row-${item.id}`)))
       await clearShopping()
@@ -77,7 +83,7 @@ export function App() {
   }
 
   async function remove(item: Item) {
-    if (!window.confirm(`Supprimer « ${item.name} » ?`)) return
+    if (!await confirm({ title: `Supprimer « ${item.name} » ?`, action: 'Supprimer' })) return
     await run(async () => {
       await animateRemoval([document.getElementById(`reorder-row-${item.id}`)])
       await deleteItem(item.id)
@@ -109,7 +115,7 @@ export function App() {
             </div>
             <div className="flex">
               {mode === 'shopping' && (
-                <Button variant="ghost" className="px-2" aria-label="Vider les courses" disabled={!shoppingItems.length} onClick={emptyShopping}>
+                <Button variant="ghost" className="px-2" aria-label="Vider les courses" disabled={!shoppingItems.length} onClick={() => void emptyShopping()}>
                   <Trash2 size={21} />
                 </Button>
               )}

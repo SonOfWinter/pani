@@ -6,6 +6,7 @@ import { Undo2 } from 'lucide-react'
 import { QuantityStepper } from './QuantityStepper'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { changeQuantity, clearShopping, setItemChecked } from '../data/items'
+import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
 type ShoppingItem = Item & { checkedAt: string | null }
@@ -35,6 +36,7 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
 }
 
 export function ShoppingView({ items, categories }: { items: ShoppingItem[]; categories: Category[] }) {
+  const confirm = useConfirm()
   const focusAfterChange = useRef<{ id: string; destination: string } | null>(null)
   const [lastCheck, setLastCheck] = useState<{ id: string; name: string; checkedAt: string }>()
   const [error, setError] = useState('')
@@ -84,7 +86,7 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
   }
 
   async function clearChecked() {
-    if (!window.confirm('Retirer les articles pris de la liste ?')) return
+    if (!await confirm({ title: 'Retirer les articles pris de la liste ?', action: 'Retirer les articles pris' })) return
     try {
       await animateRemoval(checked.map((item) => document.getElementById(`shopping-row-${item.id}`)))
       await clearShopping(checked.map((item) => item.id))

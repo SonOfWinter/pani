@@ -13,20 +13,35 @@ export function BottomSheet({ titleId, busy = false, onClose, children, ref }: {
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const panel = useRef<HTMLDivElement>(null)
+  const opening = useRef<Animation | null>(null)
   const closing = useRef(false)
   const outsidePress = useRef(false)
   const closeTimer = useRef<number | undefined>(undefined)
 
   useLayoutEffect(() => {
     const node = dialog.current
-    if (!node) return
+    const content = panel.current
+    if (!node || !content) return
     const previousFocus = document.activeElement
     const { scrollX, scrollY } = window
     const body = document.body
     const previous = { position: body.style.position, top: body.style.top, insetInline: body.style.insetInline }
     Object.assign(body.style, { position: 'fixed', top: `-${scrollY}px`, insetInline: '0' })
+    // Focus the modal itself so a keyboard does not open over the entry animation.
+    node.setAttribute('autofocus', '')
     node.showModal()
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      content.dataset.opening = 'true'
+      const animation = content.animate(
+        [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }],
+        { duration: 320, easing: 'cubic-bezier(.18,.8,.24,1)', fill: 'backwards' },
+      )
+      opening.current = animation
+      void animation.finished.then(() => { delete content.dataset.opening }, () => {})
+    }
     return () => {
+      opening.current?.cancel()
+      delete content.dataset.opening
       window.clearTimeout(closeTimer.current)
       node.close()
       Object.assign(body.style, previous)
@@ -45,8 +60,11 @@ export function BottomSheet({ titleId, busy = false, onClose, children, ref }: {
       return
     }
     if (dialog.current) dialog.current.dataset.closing = 'true'
-    panel.current?.animate(
-      [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }],
+    const content = panel.current
+    const start = content ? window.getComputedStyle(content).transform : 'none'
+    opening.current?.cancel()
+    content?.animate(
+      [{ transform: start }, { transform: 'translateY(100%)' }],
       { duration: 175, easing: 'ease-in', fill: 'forwards' },
     )
     closeTimer.current = window.setTimeout(after, 175)

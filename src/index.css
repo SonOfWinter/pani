@@ -81,10 +81,40 @@ html:has(.pani-modal[open]) {
 }
 
 .pani-sheet {
-  @apply w-full max-w-xl overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-5 text-foreground;
+  @apply w-full max-w-xl overflow-x-hidden overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-5 text-foreground;
   max-height: min(90dvh, 38rem);
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
-  animation: sheet-in 270ms cubic-bezier(.2,.8,.25,1) both;
+}
+
+.pani-sheet[data-opening] {
+  pointer-events: none;
+}
+
+.pani-confirm[open] {
+  @apply items-center p-4;
+}
+
+.pani-confirm-card {
+  @apply w-full max-w-sm overflow-y-auto rounded-2xl border border-border bg-card p-5 text-foreground shadow-lg;
+  max-height: calc(100dvh - 2rem);
+}
+
+.backup-panel {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.backup-panel :where(fieldset, section, form, label, input, select, button) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.backup-panel :where(fieldset, section, form, label).grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.backup-panel :where(input, select) {
+  inline-size: 100%;
 }
 
 .screen-transition {
@@ -98,12 +128,6 @@ html:has(.pani-modal[open]) {
 @keyframes backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes sheet-in {
-  from { transform: translateY(100%); pointer-events: none; }
-  99% { pointer-events: none; }
-  to { transform: translateY(0); pointer-events: auto; }
 }
 
 @keyframes screen-in {
@@ -230,6 +254,16 @@ html:has(.pani-modal[open]) {
   @apply flex shrink-0 items-center rounded-lg bg-muted tabular-nums;
 }
 
+.quantity-stepper button {
+  @apply relative h-9;
+}
+
+.quantity-stepper button::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
 .quantity-stepper output {
   @apply max-w-[5rem] min-w-6 break-all text-center text-sm font-semibold;
 }
@@ -253,7 +287,6 @@ html:has(.pani-modal[open]) {
     transition: none !important;
   }
 
-  .pani-sheet,
   .pani-modal::backdrop,
   .pani-modal[data-closing]::backdrop,
   .screen-transition,

@@ -8,9 +8,11 @@ import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { Reorder, SortableRow } from './Reorder'
 import { toast } from 'sonner'
 import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
+import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
 function CategoryForm({ category, onClose }: { category: Category | null; onClose: () => void }) {
+  const confirm = useConfirm()
   const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(category?.name ?? '')
   const [color, setColor] = useState(category ? categoryColor(category) : '#7d9b92')
@@ -40,6 +42,16 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
     if (!busy) void run(() => saveCategory(name, color, emoji, category?.id), category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.')
   }
 
+  async function remove(current: Category) {
+    if (await confirm({
+      title: 'Supprimer cette catégorie ?',
+      description: 'Ses articles iront dans « Sans catégorie ».',
+      action: 'Supprimer la catégorie',
+    })) {
+      await run(() => deleteCategory(current.id), 'Catégorie supprimée.')
+    }
+  }
+
   return (
     <BottomSheet ref={sheet} titleId="category-dialog-title" busy={busy} onClose={onClose}>
       <form className="grid gap-4" onSubmit={(event) => submit(event)}>
@@ -66,11 +78,7 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
           <Button type="submit" disabled={busy}>Enregistrer</Button>
         </div>
         {category && (
-          <Button variant="ghost" className="justify-self-start text-destructive" disabled={busy} onClick={() => {
-            if (window.confirm('Supprimer cette catégorie ? Ses articles iront dans « Sans catégorie ».')) {
-              void run(() => deleteCategory(category.id), 'Catégorie supprimée.')
-            }
-          }}>Supprimer la catégorie</Button>
+          <Button variant="ghost" className="justify-self-start text-destructive" disabled={busy} onClick={() => void remove(category)}>Supprimer la catégorie</Button>
         )}
       </form>
     </BottomSheet>
