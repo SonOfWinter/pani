@@ -1,8 +1,9 @@
 import { CloudSettings } from './CloudSettings'
 import type { CloudBackup } from '../backup/useCloudBackup'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { database } from '../data/database'
 import { makeBackup, readBackupFile, restoreSnapshot, type Snapshot } from '../backup/snapshot'
+import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { Button } from './ui/button'
 
 function download(text: string) {
@@ -17,7 +18,7 @@ function download(text: string) {
 }
 
 export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const sheet = useRef<BottomSheetHandle>(null)
   const [phrase, setPhrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -25,12 +26,6 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    const node = dialog.current
-    node?.showModal()
-    return () => node?.close()
-  }, [])
 
   async function run(operation: () => Promise<void>) {
     setBusy(true)
@@ -46,15 +41,10 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
   }
 
   return (
-    <dialog
-      ref={dialog}
-      className="pani-sheet"
-      aria-labelledby="backup-title"
-      onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}
-    >
+    <BottomSheet ref={sheet} titleId="backup-title" busy={busy} onClose={onClose}>
       <div className="flex items-center justify-between gap-2">
         <h2 id="backup-title" className="text-xl font-semibold">Sauvegardes</h2>
-        <Button variant="ghost" disabled={busy} onClick={onClose}>Fermer</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => sheet.current?.dismiss()}>Fermer</Button>
       </div>
       <p className="my-3 text-sm text-muted-foreground">
         Gardez votre phrase de récupération en lieu sûr. Elle est nécessaire pour ouvrir un fichier chiffré.
@@ -121,6 +111,6 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
           )}
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
-    </dialog>
+    </BottomSheet>
   )
 }

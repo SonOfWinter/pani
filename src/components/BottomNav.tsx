@@ -1,4 +1,5 @@
 import { List, ShoppingCart, Tags } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import type { Mode } from '../data/database'
 
 const tabs = [
@@ -15,6 +16,13 @@ export function BottomNav({ mode, disabled, onNavigate }: {
   return (
     <nav className="bottom-nav" aria-label="Navigation principale">
       <div className="bottom-nav-inner">
+        <div
+          className="bottom-nav-indicator-track"
+          aria-hidden="true"
+          style={{ '--active-tab': tabs.findIndex((tab) => tab.mode === mode) } as CSSProperties}
+        >
+          <div className="bottom-nav-indicator" />
+        </div>
         {tabs.map(({ mode: value, label, Icon }) => (
           <button
             key={value}

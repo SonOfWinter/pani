@@ -55,15 +55,65 @@
   @apply min-h-11 rounded-lg border border-border bg-card px-3 text-base;
 }
 
-.pani-sheet {
-  @apply fixed inset-x-0 top-auto bottom-0 m-0 mx-auto w-full max-w-xl rounded-t-3xl bg-card p-5 text-foreground;
-  max-height: min(90dvh, 38rem);
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
-  overflow: auto;
+.pani-modal {
+  @apply fixed inset-0 m-0 h-full w-full border-0 bg-transparent p-0 text-foreground;
+  max-height: none;
+  max-width: none;
+  overscroll-behavior: none;
 }
 
-.pani-sheet::backdrop {
-  background: rgb(0 0 0 / 42%);
+html:has(.pani-modal[open]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.pani-modal[open] {
+  @apply flex items-end justify-center overflow-hidden;
+}
+
+.pani-modal::backdrop {
+  background: rgb(0 0 0 / 60%);
+  animation: backdrop-in 220ms ease-out both;
+}
+
+.pani-modal[data-closing]::backdrop {
+  animation: backdrop-in 175ms ease-in reverse both;
+}
+
+.pani-sheet {
+  @apply w-full max-w-xl overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-5 text-foreground;
+  max-height: min(90dvh, 38rem);
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  animation: sheet-in 270ms cubic-bezier(.2,.8,.25,1) both;
+}
+
+.screen-transition {
+  animation: screen-in 170ms ease-out both;
+}
+
+.shopping-row {
+  animation: screen-in 165ms ease-out both;
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheet-in {
+  from { transform: translateY(100%); pointer-events: none; }
+  99% { pointer-events: none; }
+  to { transform: translateY(0); pointer-events: auto; }
+}
+
+@keyframes screen-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pani-toaster,
+.pani-toaster [data-sonner-toast] {
+  pointer-events: none;
 }
 
 .screen-header {
@@ -84,7 +134,7 @@
 }
 
 .bottom-nav-inner {
-  @apply mx-auto grid max-w-xl grid-cols-3 gap-1 px-3 py-2;
+  @apply relative isolate mx-auto grid max-w-xl grid-cols-3 gap-1 px-3 py-2;
 }
 
 .bottom-nav button {
@@ -92,7 +142,17 @@
 }
 
 .bottom-nav button[aria-pressed="true"] {
-  @apply bg-primary text-primary-foreground;
+  @apply text-primary-foreground;
+}
+
+.bottom-nav-indicator-track {
+  @apply pointer-events-none absolute inset-x-3 inset-y-2 -z-10 grid grid-cols-3 gap-1;
+}
+
+.bottom-nav-indicator {
+  @apply rounded-lg bg-primary;
+  transform: translateX(calc(var(--active-tab) * (100% + var(--spacing))));
+  transition: transform 260ms cubic-bezier(.2,.8,.25,1);
 }
 
 .list-group {
@@ -184,22 +244,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .swipe-content {
+  .swipe-content,
+  .bottom-nav-indicator {
     transition: none;
   }
 
   .sortable-row {
     transition: none !important;
   }
-}
 
-.category-dialog {
-  @apply fixed inset-0 m-auto max-w-md rounded-2xl bg-card p-5 text-foreground shadow-lg;
-  width: calc(100% - 2rem);
-  max-height: calc(100dvh - 2rem);
-  overflow: auto;
-}
-
-.category-dialog::backdrop {
-  background: rgb(0 0 0 / 48%);
+  .pani-sheet,
+  .pani-modal::backdrop,
+  .pani-modal[data-closing]::backdrop,
+  .screen-transition,
+  .shopping-row {
+    animation: none;
+  }
 }

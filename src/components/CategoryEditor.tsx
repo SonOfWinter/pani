@@ -1,33 +1,32 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { categoryColor, deleteCategory, icons, saveCategory } from '../data/categories'
 import type { Category } from '../data/database'
 import { moveCategory } from '../data/order'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { Reorder, SortableRow } from './Reorder'
+import { toast } from 'sonner'
+import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { Button } from './ui/button'
 
 function CategoryForm({ category, onClose }: { category: Category | null; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(category?.name ?? '')
   const [color, setColor] = useState(category ? categoryColor(category) : '#7d9b92')
   const [emoji, setEmoji] = useState(category ? category.emoji ?? icons[category.icon].symbol : '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    const node = dialog.current
-    node?.showModal()
-    return () => node?.close()
-  }, [])
-
-  async function run(operation: () => Promise<void>) {
+  async function run(operation: () => Promise<void>, message: string) {
     setBusy(true)
     setError('')
     try {
       await operation()
-      onClose()
+      sheet.current?.dismiss(() => {
+        onClose()
+        toast.success(message)
+      })
     } catch (reason) {
       setError(reason instanceof Error && reason.message
         ? reason.message
@@ -38,20 +37,12 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!busy) void run(() => saveCategory(name, color, emoji, category?.id))
+    if (!busy) void run(() => saveCategory(name, color, emoji, category?.id), category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.')
   }
 
   return (
-    <dialog
-      ref={dialog}
-      className="category-dialog"
-      aria-labelledby="category-dialog-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!busy) onClose()
-      }}
-    >
-      <form className="grid gap-4" onSubmit={submit}>
+    <BottomSheet ref={sheet} titleId="category-dialog-title" busy={busy} onClose={onClose}>
+      <form className="grid gap-4" onSubmit={(event) => submit(event)}>
         <h2 id="category-dialog-title" className="text-xl font-semibold">
           {category ? 'Modifier la catégorie' : 'Ajouter une catégorie'}
         </h2>
@@ -71,18 +62,18 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
         </div>
         {error && <p role="alert">{error}</p>}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" disabled={busy} onClick={onClose}>Annuler</Button>
+          <Button variant="ghost" disabled={busy} onClick={() => sheet.current?.dismiss()}>Annuler</Button>
           <Button type="submit" disabled={busy}>Enregistrer</Button>
         </div>
         {category && (
           <Button variant="ghost" className="justify-self-start text-destructive" disabled={busy} onClick={() => {
             if (window.confirm('Supprimer cette catégorie ? Ses articles iront dans « Sans catégorie ».')) {
-              void run(() => deleteCategory(category.id))
+              void run(() => deleteCategory(category.id), 'Catégorie supprimée.')
             }
           }}>Supprimer la catégorie</Button>
         )}
       </form>
-    </dialog>
+    </BottomSheet>
   )
 }
 

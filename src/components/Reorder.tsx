@@ -124,6 +124,7 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
 
   return (
     <li
+      id={`reorder-row-${id}`}
       ref={setNodeRef}
       style={{
         transform: !isDragging || coloredRow ? CSS.Translate.toString(transform) : undefined,

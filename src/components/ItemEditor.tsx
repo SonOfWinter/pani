@@ -1,6 +1,7 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { saveItem } from '../data/items'
 import type { Category, Item } from '../data/database'
+import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { Button } from './ui/button'
 
 export function ItemEditor({ item, categories, onClose, onSave }: {
@@ -9,28 +10,24 @@ export function ItemEditor({ item, categories, onClose, onSave }: {
   onClose: () => void
   onSave: (id: string) => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(item?.name ?? '')
   const [quantity, setQuantity] = useState(item?.quantity ?? '')
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    const node = dialog.current
-    node?.showModal()
-    return () => node?.close()
-  }, [])
-
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     if (!name.trim()) {
       setError('Saisissez un nom.')
       return
     }
     setSaving(true)
     try {
-      onSave(await saveItem(name, quantity, categoryId || null, item?.id))
+      const id = await saveItem(name, quantity, categoryId || null, item?.id)
+      sheet.current?.dismiss(() => onSave(id))
     } catch {
       setError('Impossible d’enregistrer cet article. Réessayez.')
       setSaving(false)
@@ -38,15 +35,7 @@ export function ItemEditor({ item, categories, onClose, onSave }: {
   }
 
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="item-editor-title"
-      className="pani-sheet"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!saving) onClose()
-      }}
-    >
+    <BottomSheet ref={sheet} titleId="item-editor-title" busy={saving} onClose={onClose}>
       <form onSubmit={(event) => void submit(event)} className="grid gap-4">
         <h2 id="item-editor-title" className="text-xl font-semibold">
           {item ? 'Modifier l’article' : 'Ajouter un article'}
@@ -68,10 +57,10 @@ export function ItemEditor({ item, categories, onClose, onSave }: {
         </label>
         {error && <p role="alert">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" disabled={saving} onClick={onClose}>Annuler</Button>
+          <Button variant="ghost" disabled={saving} onClick={() => sheet.current?.dismiss()}>Annuler</Button>
           <Button type="submit" disabled={saving}>Enregistrer</Button>
         </div>
       </form>
-    </dialog>
+    </BottomSheet>
   )
 }

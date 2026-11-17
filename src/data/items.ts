@@ -71,7 +71,8 @@ export async function changeQuantity(id: string, delta: -1 | 1, shopping = false
 export async function addToShopping(id: string) {
   return database.mutate(async () => {
     const item = await database.items.get(id)
-    if (!item || item.shopping) return false
+    if (!item) throw new Error('Cet article a été supprimé.')
+    if (item.shopping) return false
     await database.items.update(id, { shopping: { quantity: item.quantity, checkedAt: null } })
     return true
   }, Boolean)

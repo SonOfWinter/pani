@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { Category, Item } from '../data/database'
+import { toast } from 'sonner'
+import { animateRemoval } from '../lib/list-motion'
 import { Undo2 } from 'lucide-react'
 import { QuantityStepper } from './QuantityStepper'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
@@ -14,7 +16,7 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
   onQuantity: (id: string, delta: -1 | 1) => void
 }) {
   return (
-    <li className="flex items-center gap-2 py-1 pr-2">
+    <li id={`shopping-row-${item.id}`} className="shopping-row flex items-center gap-2 py-1 pr-2">
       <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 pl-3">
         <input
           id={`purchase-${item.id}`}
@@ -84,10 +86,11 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
   async function clearChecked() {
     if (!window.confirm('Retirer les articles pris de la liste ?')) return
     try {
+      await animateRemoval(checked.map((item) => document.getElementById(`shopping-row-${item.id}`)))
       await clearShopping(checked.map((item) => item.id))
       setLastCheck(undefined)
       setError('')
-      setAnnouncement('Articles pris retirés.')
+      toast.success('Articles pris retirés.')
     } catch {
       setError('Impossible de retirer les articles pris.')
     }
@@ -102,7 +105,7 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
       if (result !== null) throw new Error('Cet article a changé.')
       setLastCheck(undefined)
       setError('')
-      setAnnouncement(`${lastCheck.name} est de nouveau à acheter.`)
+      toast.success(`${lastCheck.name} est de nouveau à acheter.`)
       requestAnimationFrame(() => document.getElementById(`purchase-${lastCheck.id}`)?.focus())
     } catch {
       setError('Impossible d’annuler cette coche.')

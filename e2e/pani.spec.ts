@@ -1,8 +1,15 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+
+async function waitForSheet(popup: Locator) {
+  await popup.locator('.pani-sheet').evaluate((panel) =>
+    Promise.allSettled(panel.getAnimations().map((animation) => animation.finished)),
+  )
+}
 
 async function addItem(page: Page, name: string, quantity = '') {
   await page.getByRole('button', { name: 'Ajouter un article' }).click()
   const form = page.getByRole('dialog', { name: 'Ajouter un article' })
+  await waitForSheet(form)
   await form.getByLabel('Nom', { exact: true }).fill(name)
   await form.getByLabel('Quantité (facultatif)').fill(quantity)
   await form.getByRole('button', { name: 'Enregistrer' }).click()
@@ -11,7 +18,7 @@ async function addItem(page: Page, name: string, quantity = '') {
 
 async function swipeIntoShopping(page: Page, name: string) {
   const item = page.getByRole('button', { name: `Actions pour ${name}` })
-  await expect(item).toBeVisible()
+  await item.hover()
   const box = await item.boundingBox()
   if (!box) throw new Error('Article introuvable.')
   const x = box.x + box.width / 2
@@ -34,7 +41,9 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await expect(page.getByRole('checkbox')).toHaveCount(0)
   await page.getByRole('button', { name: 'Liste', exact: true }).click()
   await swipeIntoShopping(page, 'Tomates')
+  await expect(page.getByText('Tomates ajouté aux courses.', { exact: true })).toBeVisible()
   await swipeIntoShopping(page, 'Tomates')
+  await expect(page.getByText('Tomates est déjà dans les courses.', { exact: true })).toBeVisible()
   await swipeIntoShopping(page, 'Riz')
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
   await expect(page.getByRole('checkbox')).toHaveCount(2)
@@ -72,6 +81,7 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await expect(page.getByText('500 g', { exact: true })).toBeVisible()
   await expect(page.getByText('Riz', { exact: true })).toBeVisible()
   await swipeIntoShopping(page, 'Riz')
+  await expect(page.getByText('Riz ajouté aux courses.', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
   await page.getByRole('checkbox', { name: 'Riz' }).click()
   await expect(page.getByText('Articles pris (1)', { exact: true })).toBeVisible()
@@ -159,6 +169,7 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await expect(page.getByRole('textbox', { name: 'Nom', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
   const popup = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+  await waitForSheet(popup)
   await popup.getByRole('textbox', { name: 'Nom', exact: true }).fill('Fruits')
   await popup.getByLabel('Couleur', { exact: true }).fill('#008877')
   await popup.getByLabel('Emoji', { exact: true }).fill('🍇')
@@ -214,6 +225,7 @@ test('une catégorie reste dans sa colonne pendant un déplacement latéral', as
   for (const name of ['Fruits', 'Pain', 'Boissons']) {
     await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
     const popup = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+    await waitForSheet(popup)
     await popup.getByRole('textbox', { name: 'Nom', exact: true }).fill(name)
     await popup.getByRole('button', { name: 'Enregistrer', exact: true }).click()
     await expect(popup).toBeHidden()
@@ -246,4 +258,46 @@ test('une catégorie reste dans sa colonne pendant un déplacement latéral', as
   await page.mouse.move(right, following.y + following.height / 2, { steps: 10 })
   await page.mouse.up()
   await expect(page.getByRole('listitem')).toHaveText([/Fruits/, /Boissons/, /Pain/])
+})
+
+
+test('les panneaux se ferment en touchant le fond et les actions affichent leur confirmation', async ({ page }) => {
+  await page.goto('/')
+  const add = page.getByRole('button', { name: 'Ajouter un article' })
+  const outside = { x: 5, y: 5 }
+  await add.focus()
+  await add.press('Enter')
+  await expect(page.getByRole('dialog', { name: 'Ajouter un article' })).toBeVisible()
+  await expect(page.locator('body')).toHaveCSS('position', 'fixed')
+  await page.touchscreen.tap(outside.x, outside.y)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('body')).not.toHaveCSS('position', 'fixed')
+  await expect(add).toBeFocused()
+
+  await page.getByRole('button', { name: 'Sauvegardes', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Sauvegardes' })).toBeVisible()
+  await page.touchscreen.tap(outside.x, outside.y)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
+  await expect(page.getByRole('dialog', { name: 'Ajouter une catégorie' })).toBeVisible()
+  await page.touchscreen.tap(outside.x, outside.y)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await addItem(page, 'Riz')
+  await expect(page.getByText('Article ajouté.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Actions pour Riz' }).click()
+  await page.getByRole('button', { name: 'Modifier Riz' }).click()
+  const editor = page.getByRole('dialog', { name: 'Modifier l’article' })
+  await editor.getByLabel('Nom', { exact: true }).fill('Riz basmati')
+  await editor.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(editor).toHaveCount(0)
+  await expect(page.getByText('Article modifié.', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Actions pour Riz basmati' }).click()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Supprimer Riz basmati' }).click()
+  await expect(page.getByText('Riz basmati supprimé.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Actions pour Riz basmati' })).toHaveCount(0)
 })
