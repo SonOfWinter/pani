@@ -1,6 +1,6 @@
 # Pani
 
-Pani est une liste de courses installable sur iPhone. Préparez vos achats dans **Liste**, puis cochez-les en magasin dans **Courses**, même hors ligne. Une sauvegarde chiffrée facultative permet de retrouver la liste sur un autre appareil.
+Pani est une application web progressive (PWA) de liste de courses, installable sur mobile. Préparez vos achats dans **Liste**, puis cochez-les en magasin dans **Courses**, même hors ligne. Une sauvegarde chiffrée facultative permet de retrouver la liste sur un autre appareil.
 
 ## Démarrage local
 
