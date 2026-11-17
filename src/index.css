@@ -113,7 +113,7 @@ html:has(.pani-modal[open]) {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.backup-panel :where(input, select) {
+.backup-panel :where(input:not([type='file']), select) {
   inline-size: 100%;
 }
 

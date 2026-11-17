@@ -1,3 +1,4 @@
+import { FileUp } from 'lucide-react'
 import { CloudSettings } from './CloudSettings'
 import type { CloudBackup } from '../backup/useCloudBackup'
 import { useLayoutEffect, useRef, useState } from 'react'
@@ -22,6 +23,7 @@ function download(text: string) {
 export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
   const sheet = useRef<BottomSheetHandle>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const chooseFile = useRef<HTMLButtonElement>(null)
   const restorePhraseInput = useRef<HTMLInputElement>(null)
   const feedback = useRef<HTMLDivElement>(null)
   const previewRegion = useRef<HTMLElement>(null)
@@ -62,7 +64,7 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
   function openFilePreview() {
     if (!file) {
       setMissing('file')
-      fileInput.current?.focus()
+      chooseFile.current?.focus()
       return
     }
     if (!restorePhrase.trim()) {
@@ -141,20 +143,31 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
           </section>
           <section className="grid gap-2 rounded-lg bg-muted p-3">
             <h3 className="font-semibold">Restaurer un fichier</h3>
-            <label className="grid gap-1">
-              Fichier de sauvegarde
-              <input
-                ref={fileInput}
-                type="file"
-                aria-invalid={missing === 'file' || undefined}
-                aria-describedby={missing === 'file' ? 'restore-file-message' : undefined}
-                onChange={(event) => {
-                  setFile(event.target.files?.[0] ?? null)
-                  setMissing(undefined)
-                  setPreview(undefined)
-                }}
-              />
-            </label>
+            <input
+              ref={fileInput}
+              type="file"
+              className="sr-only pointer-events-none"
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(event) => {
+                setFile(event.target.files?.[0] ?? null)
+                setMissing(undefined)
+                setPreview(undefined)
+              }}
+            />
+            <Button
+              ref={chooseFile}
+              variant="outline"
+              className="justify-start"
+              aria-describedby={missing === 'file' ? 'restore-file-status restore-file-message' : 'restore-file-status'}
+              onClick={() => fileInput.current?.click()}
+            >
+              <FileUp size={18} aria-hidden="true" />
+              {file ? 'Changer de fichier' : 'Choisir un fichier'}
+            </Button>
+            <p id="restore-file-status" role="status" className="text-sm text-muted-foreground">
+              {file?.name ?? 'Aucun fichier de sauvegarde sélectionné.'}
+            </p>
             <label className="grid gap-1">
               Phrase de récupération du fichier
               <input

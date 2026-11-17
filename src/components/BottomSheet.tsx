@@ -78,6 +78,8 @@ export function BottomSheet({ titleId, busy = false, onClose, children, ref }: {
       className="pani-modal"
       aria-labelledby={titleId}
       onCancel={(event) => {
+        // A file input's cancel event bubbles when the system picker is dismissed.
+        if (event.target !== event.currentTarget) return
         event.preventDefault()
         if (!busy) dismiss()
       }}
