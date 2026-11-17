@@ -17,37 +17,25 @@
 }
 
 :root {
-  color-scheme: light dark;
-  --background: #f6f8f7;
-  --foreground: #171d1b;
-  --card: #ffffff;
-  --muted: #e9efec;
-  --muted-foreground: #505b56;
-  --border: #d6dfdb;
-  --primary: #202c27;
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #141414;
+  --muted: #232323;
+  --muted-foreground: #bcbcbc;
+  --border: #494949;
+  --primary: #bd1748;
   --primary-foreground: #ffffff;
-  --destructive: #a12d35;
-  --destructive-foreground: #ffffff;
-  --ring: #376354;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #131816;
-    --foreground: #f3f6f4;
-    --card: #1c2421;
-    --muted: #29342f;
-    --muted-foreground: #b8c6bf;
-    --border: #3a4a42;
-    --primary: #e4eee9;
-    --primary-foreground: #1b2621;
-    --destructive: #f5a7ad;
-    --destructive-foreground: #52171c;
-    --ring: #8ec9b4;
-  }
+  --destructive: #f5a7ad;
+  --destructive-foreground: #52171c;
+  --ring: #ff7ca1;
 }
 
 @layer base {
+  html {
+    @apply bg-background;
+  }
+
   body {
     @apply bg-background font-sans text-foreground;
   }
@@ -103,7 +91,7 @@
 }
 
 .bottom-nav button[aria-pressed="true"] {
-  @apply bg-muted text-foreground;
+  @apply bg-primary text-primary-foreground;
 }
 
 .list-group {
@@ -115,7 +103,7 @@
 }
 
 .category-heading {
-  @apply flex items-center gap-2 px-3 py-2.5 text-sm font-semibold;
+  @apply flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold;
 }
 
 .color-picker {
