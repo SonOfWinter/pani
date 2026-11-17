@@ -1,3 +1,4 @@
+import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
@@ -45,6 +46,7 @@ export function App() {
     },
     [],
   )
+  const cloud = useCloudBackup(result?.list?.state)
   const [announcement, setAnnouncement] = useState('')
   const [error, setError] = useState('')
   const [backupOpen, setBackupOpen] = useState(false)
@@ -214,7 +216,7 @@ export function App() {
         />
       )}
       {categoriesOpen && <CategoryEditor categories={categories} onClose={() => setCategoriesOpen(false)} />}
-      {backupOpen && <BackupPanel hasData={items.length + categories.length > 0} onClose={() => setBackupOpen(false)} />}
+      {backupOpen && <BackupPanel cloud={cloud} hasData={items.length + categories.length > 0} onClose={() => setBackupOpen(false)} />}
     </main>
   )
 }

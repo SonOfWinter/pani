@@ -120,6 +120,8 @@ export async function restoreSnapshot(input: Snapshot, expectedRevision: number)
     if ((await database.readState()).revision !== expectedRevision) {
       throw new Error('La liste a changé. Ouvrez à nouveau la sauvegarde avant de restaurer.')
     }
+    const state = await database.readState()
+    if (state.cloud?.enabled) await database.state.put({ ...state, cloud: { ...state.cloud, enabled: false } })
     await database.items.clear()
     await database.categories.clear()
     await database.categories.bulkAdd(snapshot.categories)

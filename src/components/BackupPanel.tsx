@@ -1,3 +1,5 @@
+import { CloudSettings } from './CloudSettings'
+import type { CloudBackup } from '../backup/useCloudBackup'
 import { useEffect, useRef, useState } from 'react'
 import { database } from '../data/database'
 import { makeBackup, readBackupFile, restoreSnapshot, type Snapshot } from '../backup/snapshot'
@@ -14,7 +16,7 @@ function download(text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
-export function BackupPanel({ hasData, onClose }: { hasData: boolean; onClose: () => void }) {
+export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [phrase, setPhrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -116,6 +118,7 @@ export function BackupPanel({ hasData, onClose }: { hasData: boolean; onClose: (
           )}
         </section>
       </fieldset>
+      <CloudSettings cloud={cloud} />
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
     </dialog>

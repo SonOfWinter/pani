@@ -26,10 +26,20 @@ export interface Category {
   updatedAt: string
 }
 
+export interface CloudPreferences {
+  enabled: boolean
+  accountId: string
+  installationId: string
+  savedRevision: number | null
+  savedAt: string | null
+  savedPath?: string
+}
+
 export interface LocalState {
   id: 'local'
   mode: Mode
   revision: number
+  cloud?: CloudPreferences
 }
 
 export class PaniDatabase extends Dexie {
