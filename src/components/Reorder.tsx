@@ -4,7 +4,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { ReactNode } from 'react'
+import { useRef, type PointerEvent, type ReactNode } from 'react'
 import { Button } from './ui/button'
 
 export function Reorder({ children, onDrop }: {
@@ -37,18 +37,40 @@ export function Reorder({ children, onDrop }: {
   )
 }
 
-export function SortableRow({ id, label, disabled = false, children }: {
+export function SortableRow({ id, label, disabled = false, onSwipe, children }: {
   id: string
   label: string
   disabled?: boolean
+  onSwipe?: () => void
   children: ReactNode
 }) {
+  const gesture = useRef<{ id: number; x: number; y: number } | null>(null)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging, isOver } =
     useSortable({ id, disabled })
+
+  function beginSwipe(event: PointerEvent<HTMLLIElement>) {
+    if (!onSwipe || event.pointerType === 'mouse' || !event.isPrimary ||
+      !(event.target instanceof Element) ||
+      event.target.closest('button, input, select, summary, details, a')) return
+    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
+  }
+
+  function finishSwipe(event: PointerEvent<HTMLLIElement>) {
+    const start = gesture.current
+    if (!start || start.id !== event.pointerId) return
+    gesture.current = null
+    const dx = start.x - event.clientX
+    const dy = Math.abs(start.y - event.clientY)
+    if (!isDragging && dx >= 48 && dx > dy * 1.5) onSwipe?.()
+  }
+
   return (
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform) }}
+      onPointerDown={beginSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={() => { gesture.current = null }}
+      style={{ transform: CSS.Transform.toString(transform), touchAction: onSwipe ? 'pan-y' : undefined }}
       className={`relative flex min-h-11 items-center gap-2 bg-card px-2 py-1 ${isDragging ? 'z-10 opacity-75' : ''} ${isOver ? 'ring-2 ring-inset ring-ring' : ''}`}
     >
       {!disabled && (

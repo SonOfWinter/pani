@@ -154,12 +154,21 @@ export function App() {
               <SortableContext items={group.items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                 <ul className="divide-y divide-muted rounded-lg bg-card">
                   {group.items.map((item, index) => (
-                    <SortableRow key={item.id} id={item.id} label={item.name} disabled={Boolean(query.trim())}>
+                    <SortableRow
+                      key={item.id}
+                      id={item.id}
+                      label={item.name}
+                      disabled={Boolean(query.trim())}
+                      onSwipe={() => {
+                        const menu = document.getElementById(`actions-${item.id}`)
+                        if (menu instanceof HTMLDetailsElement) menu.open = true
+                      }}
+                    >
                       <div className="min-w-0 flex-1">
                         <p className="break-words">{item.name}</p>
                         {item.quantity && <p className="break-words text-sm text-muted-foreground">{item.quantity}</p>}
                       </div>
-                      <details className="shrink-0">
+                      <details id={`actions-${item.id}`} name="item-actions" className="shrink-0">
                         <summary className="flex min-h-11 cursor-pointer items-center px-2" aria-label={`Actions pour ${item.name}`}>•••</summary>
                         <Button variant="ghost" onClick={() => setEditor({ item })}>Modifier</Button>
                         <Button variant="ghost" onClick={() => void remove(item)}>Supprimer</Button>
