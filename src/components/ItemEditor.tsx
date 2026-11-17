@@ -1,16 +1,18 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { saveItem } from '../data/items'
-import type { Item } from '../data/database'
+import type { Category, Item } from '../data/database'
 import { Button } from './ui/button'
 
-export function ItemEditor({ item, onClose, onSave }: {
+export function ItemEditor({ item, categories, onClose, onSave }: {
   item: Item | null
+  categories: Category[]
   onClose: () => void
   onSave: (id: string) => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [name, setName] = useState(item?.name ?? '')
   const [quantity, setQuantity] = useState(item?.quantity ?? '')
+  const [categoryId, setCategoryId] = useState(item?.categoryId ?? '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -28,7 +30,7 @@ export function ItemEditor({ item, onClose, onSave }: {
     }
     setSaving(true)
     try {
-      onSave(await saveItem(name, quantity, item?.id))
+      onSave(await saveItem(name, quantity, categoryId || null, item?.id))
     } catch {
       setError('Impossible d’enregistrer cet article. Réessayez.')
       setSaving(false)
@@ -56,6 +58,13 @@ export function ItemEditor({ item, onClose, onSave }: {
         <label className="grid gap-1">
           Quantité (facultatif)
           <input className="pani-input" placeholder="500 g" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        </label>
+        <label className="grid gap-1">
+          Catégorie
+          <select className="pani-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+            <option value="">Sans catégorie</option>
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
         </label>
         {error && <p role="alert">{error}</p>}
         <div className="flex justify-end gap-2">

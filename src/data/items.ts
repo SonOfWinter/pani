@@ -1,6 +1,6 @@
 import { database } from './database'
 
-export async function saveItem(name: string, quantity: string, id?: string) {
+export async function saveItem(name: string, quantity: string, categoryId: string | null, id?: string) {
   const cleanName = name.trim()
   if (!cleanName) throw new Error('Saisissez un nom.')
   const updatedAt = new Date().toISOString()
@@ -8,22 +8,29 @@ export async function saveItem(name: string, quantity: string, id?: string) {
   return database.mutate(async () => {
     const existing = id ? await database.items.get(id) : undefined
     if (id && !existing) throw new Error('Cet article a été supprimé.')
+    if (categoryId && !await database.categories.get(categoryId)) {
+      throw new Error('Cette catégorie a été supprimée.')
+    }
+    const sameCategory = existing?.categoryId === categoryId
+    const last = sameCategory ? undefined : await database.items.orderBy('position').filter(
+      (item) => item.categoryId === categoryId,
+    ).last()
+    const position = sameCategory && existing ? existing.position : (last?.position ?? -1) + 1
     if (existing) {
-      await database.items.put({ ...existing, name: cleanName, quantity: quantity.trim(), updatedAt })
+      await database.items.put({
+        ...existing, name: cleanName, quantity: quantity.trim(), categoryId, position, updatedAt,
+      })
       return existing.id
     }
 
-    const last = await database.items.orderBy('position').filter(
-      (item) => item.categoryId === null,
-    ).last()
     const newId = crypto.randomUUID()
     await database.items.add({
       id: newId,
       name: cleanName,
       quantity: quantity.trim(),
-      categoryId: null,
+      categoryId,
       checkedAt: null,
-      position: (last?.position ?? -1) + 1,
+      position,
       createdAt: updatedAt,
       updatedAt,
     })

@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import { CategoryEditor } from './components/CategoryEditor'
+import { colors, icons } from './data/categories'
 import { ItemEditor } from './components/ItemEditor'
 import { deleteItem } from './data/items'
 import { Button } from './components/ui/button'
@@ -15,11 +17,13 @@ export function groupItems(items: Item[], categories: Category[]) {
     ...categories.map((category) => ({
       id: category.id,
       label: category.name,
+      category,
       items: items.filter((item) => item.categoryId === category.id),
     })),
     {
       id: null,
       label: 'Sans catégorie',
+      category: null,
       items: items.filter((item) => item.categoryId === null),
     },
   ].filter((group) => group.items.length > 0)
@@ -37,6 +41,7 @@ export function App() {
     [],
   )
   const [error, setError] = useState('')
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
 
@@ -101,6 +106,7 @@ export function App() {
             onChange={(event) => setQuery(event.target.value)}
           />
           <Button id="add-item" onClick={() => setEditor({ item: null })}>Ajouter un article</Button>
+          <Button variant="outline" onClick={() => setCategoriesOpen(true)}>Catégories</Button>
         </div>
       )}
       {error && <p role="alert">{error}</p>}
@@ -113,7 +119,10 @@ export function App() {
       )}
       {groups.map((group) => (
         <section key={group.id ?? 'none'} className="mb-6">
-          <h2 className="mb-2 px-2 font-semibold">{group.label}</h2>
+          <h2 className={`mb-2 rounded-lg px-2 py-1 font-semibold ${group.category ? colors[group.category.color].style : ''}`}>
+            {group.category && <span aria-hidden="true" className="mr-2">{icons[group.category.icon].symbol}</span>}
+            {group.label}
+          </h2>
           <ul className="divide-y divide-muted rounded-lg bg-card">
             {group.items.map((item) => (
               <li key={item.id} className="flex min-h-11 items-center justify-between gap-4 px-4 py-2">
@@ -136,6 +145,7 @@ export function App() {
       {editor && (
         <ItemEditor
           item={editor.item}
+          categories={categories}
           onClose={() => setEditor(null)}
           onSave={() => {
             if (!editor.item) setQuery('')
@@ -143,6 +153,7 @@ export function App() {
           }}
         />
       )}
+      {categoriesOpen && <CategoryEditor categories={categories} onClose={() => setCategoriesOpen(false)} />}
     </main>
   )
 }
