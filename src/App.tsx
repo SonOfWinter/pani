@@ -1,3 +1,6 @@
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
+import { moveItem } from './data/order'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { ShoppingView } from './components/ShoppingView'
@@ -41,10 +44,21 @@ export function App() {
     },
     [],
   )
+  const [announcement, setAnnouncement] = useState('')
   const [error, setError] = useState('')
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
+
+  async function reorder(item: Item, destination: Parameters<typeof moveItem>[1]) {
+    try {
+      await moveItem(item.id, destination)
+      setError('')
+      setAnnouncement(`${item.name} déplacé.`)
+    } catch {
+      setError('Impossible de déplacer cet article.')
+    }
+  }
 
   async function remove(item: Item) {
     if (!window.confirm(`Supprimer « ${item.name} » ?`)) return
@@ -110,6 +124,7 @@ export function App() {
           <Button variant="outline" onClick={() => setCategoriesOpen(true)}>Catégories</Button>
         </div>
       )}
+      <p role="status" className="sr-only">{announcement}</p>
       {error && <p role="alert">{error}</p>}
       {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
       {!result && <p role="status">Ouverture de la liste…</p>}
@@ -119,29 +134,62 @@ export function App() {
           {query.trim() ? 'Aucun résultat.' : 'Votre liste est vide.'}
         </p>
       )}
-      {mode === 'list' && groups.map((group) => (
-        <section key={group.id ?? 'none'} className="mb-6">
-          <h2 className={`mb-2 rounded-lg px-2 py-1 font-semibold ${group.category ? colors[group.category.color].style : ''}`}>
-            {group.category && <span aria-hidden="true" className="mr-2">{icons[group.category.icon].symbol}</span>}
-            {group.label}
-          </h2>
-          <ul className="divide-y divide-muted rounded-lg bg-card">
-            {group.items.map((item) => (
-              <li key={item.id} className="flex min-h-11 items-center justify-between gap-4 px-4 py-2">
-                <div className="min-w-0">
-                  <p className="break-words">{item.name}</p>
-                  {item.quantity && <p className="break-words text-sm text-muted-foreground">{item.quantity}</p>}
-                </div>
-                  <details className="shrink-0">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-2" aria-label={`Actions pour ${item.name}`}>•••</summary>
-                    <Button variant="ghost" onClick={() => setEditor({ item })}>Modifier</Button>
-                    <Button variant="ghost" onClick={() => void remove(item)}>Supprimer</Button>
-                  </details>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {mode === 'list' && (
+        <Reorder onDrop={({ active, over }) => {
+          if (!over || active.id === over.id) return
+          const item = items.find((entry) => entry.id === active.id)
+          const target = items.find((entry) => entry.id === over.id)
+          const overId = String(over.id)
+          if (item && target) void reorder(item, { categoryId: target.categoryId, targetId: target.id })
+          else if (item && overId.startsWith('category:')) {
+            void reorder(item, { categoryId: overId.slice(9) || null })
+          }
+        }}>
+          {groups.map((group) => (
+            <section key={group.id ?? 'none'} className="mb-6">
+              <h2 className={`mb-2 rounded-lg px-2 py-1 font-semibold ${group.category ? colors[group.category.color].style : ''}`}>
+                {group.category && <span aria-hidden="true" className="mr-2">{icons[group.category.icon].symbol}</span>}
+                {group.label}
+              </h2>
+              <SortableContext items={group.items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                <ul className="divide-y divide-muted rounded-lg bg-card">
+                  {group.items.map((item, index) => (
+                    <SortableRow key={item.id} id={item.id} label={item.name} disabled={Boolean(query.trim())}>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words">{item.name}</p>
+                        {item.quantity && <p className="break-words text-sm text-muted-foreground">{item.quantity}</p>}
+                      </div>
+                      <details className="shrink-0">
+                        <summary className="flex min-h-11 cursor-pointer items-center px-2" aria-label={`Actions pour ${item.name}`}>•••</summary>
+                        <Button variant="ghost" onClick={() => setEditor({ item })}>Modifier</Button>
+                        <Button variant="ghost" onClick={() => void remove(item)}>Supprimer</Button>
+                        {!query.trim() && (
+                          <>
+                            <Button variant="ghost" disabled={index === 0} onClick={() => void reorder(item, { direction: -1 })}>Monter</Button>
+                            <Button variant="ghost" disabled={index === group.items.length - 1} onClick={() => void reorder(item, { direction: 1 })}>Descendre</Button>
+                          </>
+                        )}
+                        <label className="grid gap-1 px-2 pb-2">
+                          Changer de catégorie
+                          <select className="pani-input" value={item.categoryId ?? ''} onChange={(event) => {
+                            void reorder(item, { categoryId: event.currentTarget.value || null })
+                          }}>
+                            <option value="">Sans catégorie</option>
+                            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                          </select>
+                        </label>
+                      </details>
+                    </SortableRow>
+                  ))}
+                </ul>
+              </SortableContext>
+            </section>
+          ))}
+          {[...categories, null].map((category) => (
+            <CategoryDrop key={category?.id ?? 'none'} id={`category:${category?.id ?? ''}`} label={`Placer à la fin de ${category?.name ?? 'Sans catégorie'}`} />
+          ))}
+        </Reorder>
+      )}
       {editor && (
         <ItemEditor
           item={editor.item}

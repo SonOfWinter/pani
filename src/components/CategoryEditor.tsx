@@ -1,3 +1,6 @@
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { Reorder, SortableRow } from './Reorder'
+import { moveCategory } from '../data/order'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Category, CategoryColor, CategoryIcon } from '../data/database'
 import { colors, deleteCategory, icons, saveCategory } from '../data/categories'
@@ -26,11 +29,12 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
     setError('')
   }
 
-  async function run(operation: () => Promise<void>) {
+  async function run(operation: () => Promise<void>, reset = true) {
     setBusy(true)
     try {
       await operation()
-      edit()
+      if (reset) edit()
+      else setError('')
     } catch (reason) {
       setError(reason instanceof Error && reason.message
         ? reason.message
@@ -56,17 +60,27 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
         <h2 id="categories-title" className="text-xl font-semibold">Catégories</h2>
         <Button variant="ghost" disabled={busy} onClick={onClose}>Fermer</Button>
       </div>
-      <ul className="mb-4 grid gap-2">
-        {categories.map((category) => (
-          <li key={category.id}>
-            <Button variant="outline" disabled={busy} onClick={() => edit(category)}>
-              <span aria-hidden="true">{icons[category.icon].symbol}</span>
-              {category.name}
-              <span className="sr-only">, modifier</span>
-            </Button>
-          </li>
-        ))}
-      </ul>
+      <Reorder onDrop={({ active, over }) => {
+        if (over && active.id !== over.id) {
+          void run(() => moveCategory(String(active.id), String(over.id)), false)
+        }
+      }}>
+        <SortableContext items={categories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+          <ul className="mb-4 grid gap-2">
+            {categories.map((category, index) => (
+              <SortableRow key={category.id} id={category.id} label={category.name} disabled={busy}>
+                <Button variant="outline" disabled={busy} onClick={() => edit(category)}>
+                  <span aria-hidden="true">{icons[category.icon].symbol}</span>
+                  {category.name}
+                  <span className="sr-only">, modifier</span>
+                </Button>
+                <Button variant="ghost" disabled={busy || index === 0} aria-label={`Monter ${category.name}`} onClick={() => void run(() => moveCategory(category.id, -1), false)}>↑</Button>
+                <Button variant="ghost" disabled={busy || index === categories.length - 1} aria-label={`Descendre ${category.name}`} onClick={() => void run(() => moveCategory(category.id, 1), false)}>↓</Button>
+              </SortableRow>
+            ))}
+          </ul>
+        </SortableContext>
+      </Reorder>
       <form className="grid gap-3" onSubmit={submit}>
         <h3 className="font-semibold">{id ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</h3>
         <label className="grid gap-1">
