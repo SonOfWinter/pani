@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import { ShoppingView } from './components/ShoppingView'
 import { CategoryEditor } from './components/CategoryEditor'
 import { colors, icons } from './data/categories'
 import { ItemEditor } from './components/ItemEditor'
@@ -112,12 +113,13 @@ export function App() {
       {error && <p role="alert">{error}</p>}
       {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
       {!result && <p role="status">Ouverture de la liste…</p>}
-      {result?.list && groups.length === 0 && (
+      {result?.list && mode === 'shopping' && <ShoppingView items={items} categories={categories} />}
+      {result?.list && mode === 'list' && groups.length === 0 && (
         <p className="rounded-lg bg-card p-5 text-muted-foreground">
-          {mode === 'list' ? (query.trim() ? 'Aucun résultat.' : 'Votre liste est vide.') : 'Aucun article à acheter.'}
+          {query.trim() ? 'Aucun résultat.' : 'Votre liste est vide.'}
         </p>
       )}
-      {groups.map((group) => (
+      {mode === 'list' && groups.map((group) => (
         <section key={group.id ?? 'none'} className="mb-6">
           <h2 className={`mb-2 rounded-lg px-2 py-1 font-semibold ${group.category ? colors[group.category.color].style : ''}`}>
             {group.category && <span aria-hidden="true" className="mr-2">{icons[group.category.icon].symbol}</span>}
@@ -130,13 +132,11 @@ export function App() {
                   <p className="break-words">{item.name}</p>
                   {item.quantity && <p className="break-words text-sm text-muted-foreground">{item.quantity}</p>}
                 </div>
-                {mode === 'list' && (
                   <details className="shrink-0">
                     <summary className="flex min-h-11 cursor-pointer items-center px-2" aria-label={`Actions pour ${item.name}`}>•••</summary>
                     <Button variant="ghost" onClick={() => setEditor({ item })}>Modifier</Button>
                     <Button variant="ghost" onClick={() => void remove(item)}>Supprimer</Button>
                   </details>
-                )}
               </li>
             ))}
           </ul>

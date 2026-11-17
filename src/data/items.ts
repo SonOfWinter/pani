@@ -41,3 +41,23 @@ export async function saveItem(name: string, quantity: string, categoryId: strin
 export async function deleteItem(id: string) {
   await database.mutate(() => database.items.delete(id))
 }
+
+export async function toggleItem(id: string) {
+  await database.mutate(async () => {
+    const item = await database.items.get(id)
+    if (!item) throw new Error('Cet article a été supprimé.')
+    const updatedAt = new Date().toISOString()
+    await database.items.put({
+      ...item,
+      checkedAt: item.checkedAt === null ? updatedAt : null,
+      updatedAt,
+    })
+  })
+}
+
+export async function deleteCheckedItems(ids: string[]) {
+  await database.mutate(async () => {
+    const items = await database.items.bulkGet(ids)
+    await database.items.bulkDelete(items.flatMap((item) => item?.checkedAt ? [item.id] : []))
+  })
+}
