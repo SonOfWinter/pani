@@ -2,7 +2,18 @@
 
 Pani est une liste de courses installable sur iPhone. Préparez vos achats dans **Liste**, puis cochez-les en magasin dans **Courses**, même hors ligne. Une sauvegarde chiffrée facultative permet de retrouver la liste sur un autre appareil.
 
-Le dépôt est au stade de la conception. Le développement commence par PANI-01.
+## Démarrage local
+
+Avec Node.js 22.12 ou ultérieur, installer les dépendances via `npm ci`, puis lancer `npm run dev`. Vite affiche l’adresse locale. Le fichier de verrouillage fixe les versions utilisées par le projet.
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Ces vérifications sont aussi configurées dans GitHub Actions.
 
 ## Documentation
 
