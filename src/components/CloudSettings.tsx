@@ -1,9 +1,11 @@
+import { CloudRestore } from './CloudRestore'
+import type { Snapshot } from '../backup/snapshot'
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../backup/supabase'
 import type { CloudBackup } from '../backup/useCloudBackup'
 import { Button } from './ui/button'
 
-export function CloudSettings({ cloud }: { cloud: CloudBackup }) {
+export function CloudSettings({ cloud, onPreview }: { cloud: CloudBackup; onPreview: (data: Snapshot, revision: number, owner: string) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [phrase, setPhrase] = useState('')
@@ -77,6 +79,7 @@ export function CloudSettings({ cloud }: { cloud: CloudBackup }) {
               if (error) throw new Error('Impossible de fermer la session.')
             })}>Se déconnecter</Button>
           </div>
+          <CloudRestore key={cloud.accountId} accountId={cloud.accountId} onPreview={onPreview} />
         </>
       )}
     </section>

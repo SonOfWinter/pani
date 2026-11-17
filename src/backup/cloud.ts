@@ -1,3 +1,4 @@
+import { maxEnvelopeLength } from './envelope'
 import { database } from '../data/database'
 import { makeBackup, readBackup } from './snapshot'
 import { backupBucket, supabase } from './supabase'
@@ -91,4 +92,45 @@ export async function verifyCloudPhrase(accountId: string, phrase: string) {
   const { data, error } = await supabase.storage.from(backupBucket).download(cloud.savedPath)
   if (error) throw new Error('Impossible de vérifier la phrase. Vérifiez le réseau et réessayez.')
   await readBackup(await data.text(), phrase)
+}
+
+export interface CloudSnapshot {
+  path: string
+  date: string
+}
+
+export async function listCloudSnapshots(accountId: string) {
+  if (!supabase) return []
+  const storage = supabase.storage.from(backupBucket)
+  const snapshots: CloudSnapshot[] = []
+  const pageSize = 100
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data: folders, error } = await storage.list(accountId, { limit: pageSize, offset })
+    if (error) throw new Error('Impossible de lister les sauvegardes distantes.')
+    for (const folder of folders) {
+      if (folder.id || !/^[a-f\d-]{36}$/i.test(folder.name)) continue
+      const prefix = `${accountId}/${folder.name}`
+      const { data: files, error: filesError } = await storage.list(prefix, {
+        limit: 10,
+        sortBy: { column: 'created_at', order: 'desc' },
+      })
+      if (filesError) throw new Error('Impossible de lister les sauvegardes distantes.')
+      for (const file of files) {
+        if (file.id && file.created_at && file.name.endsWith('.pani')) {
+          snapshots.push({ path: `${prefix}/${file.name}`, date: file.created_at })
+        }
+      }
+    }
+    if (folders.length < pageSize) break
+  }
+  return snapshots.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50)
+}
+
+export async function openCloudSnapshot(accountId: string, path: string, phrase: string) {
+  if (!supabase || !path.startsWith(`${accountId}/`)) throw new Error('Sauvegarde indisponible.')
+  const { data, error } = await supabase.storage.from(backupBucket).download(path)
+  if (error) throw new Error('Téléchargement impossible. Vérifiez le réseau et réessayez.')
+  if (data.size > maxEnvelopeLength) throw new Error('La sauvegarde est trop volumineuse.')
+  return readBackup(await data.text(), phrase)
 }

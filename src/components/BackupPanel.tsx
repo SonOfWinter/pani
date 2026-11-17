@@ -21,7 +21,7 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
   const [phrase, setPhrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<{ data: Snapshot; revision: number }>()
+  const [preview, setPreview] = useState<{ data: Snapshot; revision: number; owner?: string }>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -100,25 +100,25 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
               setPreview({ data, revision })
             })
           }}>Ouvrir l’aperçu</Button>
-          {preview && (
-            <div className="grid gap-2">
+        </section>
+      </fieldset>
+      <CloudSettings cloud={cloud} onPreview={(data, revision, owner) => setPreview({ data, revision, owner })} />
+          {preview && (!preview.owner || preview.owner === cloud.accountId) && (
+            <section className="mt-4 grid gap-2 rounded-lg border border-border p-3" aria-label="Aperçu à restaurer">
               <p>
                 {new Date(preview.data.date).toLocaleString('fr-FR')} · {preview.data.items.length} article(s) · {preview.data.categories.length} catégorie(s)
               </p>
               {hasData && <p>Cette action remplace la liste locale. Vous pouvez d’abord l’exporter ci-dessus.</p>}
               <div className="flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={() => setPreview(undefined)}>Annuler</Button>
-                <Button variant="destructive" onClick={() => void run(async () => {
+                <Button variant="destructive" disabled={busy} onClick={() => void run(async () => {
                   await restoreSnapshot(preview.data, preview.revision)
                   setPreview(undefined)
                   setMessage('Sauvegarde restaurée.')
                 })}>Confirmer le remplacement</Button>
               </div>
-            </div>
+            </section>
           )}
-        </section>
-      </fieldset>
-      <CloudSettings cloud={cloud} />
       {message && <p role="status">{message}</p>}
       {error && <p role="alert">{error}</p>}
     </dialog>
