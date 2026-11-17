@@ -68,3 +68,8 @@
     @apply outline-2 outline-offset-2 outline-ring;
   }
 }
+
+.pani-shell {
+  padding-block: max(2rem, env(safe-area-inset-top)) max(2rem, env(safe-area-inset-bottom));
+  padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
+}
