@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 
-export type Mode = 'list' | 'shopping'
+export type Mode = 'list' | 'shopping' | 'categories'
 export type CategoryColor = 'green' | 'amber' | 'blue' | 'rose'
 export type CategoryIcon = 'basket' | 'apple' | 'milk' | 'package'
 
@@ -21,6 +21,8 @@ export interface Category {
   normalizedName: string
   color: CategoryColor
   icon: CategoryIcon
+  customColor?: string
+  emoji?: string
   position: number
   createdAt: string
   updatedAt: string

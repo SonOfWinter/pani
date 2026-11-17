@@ -1,24 +1,32 @@
 import {
-  closestCenter, DndContext, KeyboardSensor, PointerSensor, pointerWithin, useDroppable, useSensor, useSensors,
-  type DragEndEvent,
+  closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
+  useDroppable, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useRef, type PointerEvent, type ReactNode } from 'react'
-import { Button } from './ui/button'
+import { Ellipsis, GripVertical } from 'lucide-react'
+import { useRef, useState, type PointerEvent, type ReactNode } from 'react'
 
 export function Reorder({ children, onDrop }: {
   children: ReactNode
   onDrop: (event: DragEndEvent) => void
 }) {
+  const [label, setLabel] = useState<string>()
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={(args) => args.pointerCoordinates ? pointerWithin(args) : closestCenter(args)}
+      collisionDetection={(args) => {
+        if (!args.pointerCoordinates) return closestCenter(args)
+        const collisions = pointerWithin(args)
+        const rows = collisions.filter(({ id }) => id !== args.active.id && !String(id).startsWith('category:'))
+        if (rows.length) return rows
+        if (collisions.some(({ id }) => id === args.active.id)) return []
+        return collisions
+      }}
       accessibility={{
         screenReaderInstructions: {
           draggable: 'Appuyez sur Espace pour saisir, utilisez les flèches, puis appuyez de nouveau sur Espace. Échap annule.',
@@ -30,72 +38,127 @@ export function Reorder({ children, onDrop }: {
           onDragCancel: () => 'Déplacement annulé.',
         },
       }}
-      onDragEnd={onDrop}
+      onDragStart={({ active }) => setLabel(active.data.current?.label as string | undefined)}
+      onDragCancel={() => setLabel(undefined)}
+      onDragEnd={(event) => {
+        setLabel(undefined)
+        onDrop(event)
+      }}
     >
       {children}
+      <DragOverlay dropAnimation={null}>
+        {label && <div className="drag-preview"><GripVertical size={18} />{label}</div>}
+      </DragOverlay>
     </DndContext>
   )
 }
 
-export function SortableRow({ id, label, disabled = false, onSwipe, children }: {
+export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, children }: {
   id: string
   label: string
   disabled?: boolean
-  onSwipe?: () => void
+  menu?: ReactNode
+  menuOpen?: boolean
+  onMenuChange?: (open: boolean) => void
   children: ReactNode
 }) {
-  const gesture = useRef<{ id: number; x: number; y: number } | null>(null)
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging, isOver } =
-    useSortable({ id, disabled })
+  const gesture = useRef<{ id: number; x: number; y: number; locked: boolean } | null>(null)
+  const [slide, setSlide] = useState<number>()
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
+    useSortable({ id, disabled, data: { label } })
+  const menuWidth = 220
 
-  function beginSwipe(event: PointerEvent<HTMLLIElement>) {
-    if (!onSwipe || event.pointerType === 'mouse' || !event.isPrimary ||
-      !(event.target instanceof Element) ||
-      event.target.closest('button, input, select, summary, details, a')) return
-    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
+  function beginSwipe(event: PointerEvent<HTMLDivElement>) {
+    if (!menu || !event.isPrimary || event.button !== 0 ||
+      !(event.target instanceof Element) || event.target.closest('button, input, select, a')) return
+    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, locked: false }
   }
 
-  function finishSwipe(event: PointerEvent<HTMLLIElement>) {
+  function moveSwipe(event: PointerEvent<HTMLDivElement>) {
     const start = gesture.current
     if (!start || start.id !== event.pointerId) return
+    const dx = event.clientX - start.x
+    const dy = Math.abs(event.clientY - start.y)
+    if (!start.locked) {
+      if (dy > 9 && dy >= Math.abs(dx)) {
+        gesture.current = null
+        return
+      }
+      if (Math.abs(dx) < 9 || Math.abs(dx) <= dy) return
+      start.locked = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    setSlide(Math.max(-menuWidth, Math.min(0, (menuOpen ? -menuWidth : 0) + dx)))
+  }
+
+  function finishSwipe(event: PointerEvent<HTMLDivElement>) {
+    const start = gesture.current
+    if (start?.id !== event.pointerId) return
     gesture.current = null
-    const dx = start.x - event.clientX
-    const dy = Math.abs(start.y - event.clientY)
-    if (!isDragging && dx >= 48 && dx > dy * 1.5) onSwipe?.()
+    setSlide(undefined)
+    if (!start.locked) return
+    const dx = event.clientX - start.x
+    if (dx < -32) onMenuChange?.(true)
+    if (dx > 32) onMenuChange?.(false)
   }
 
   return (
     <li
       ref={setNodeRef}
-      onPointerDown={beginSwipe}
-      onPointerUp={finishSwipe}
-      onPointerCancel={() => { gesture.current = null }}
-      style={{ transform: CSS.Transform.toString(transform), touchAction: onSwipe ? 'pan-y' : undefined }}
-      className={`relative flex min-h-11 items-center gap-2 bg-card px-2 py-1 ${isDragging ? 'z-10 opacity-75' : ''} ${isOver ? 'ring-2 ring-inset ring-ring' : ''}`}
+      style={{ transform: isDragging ? undefined : CSS.Translate.toString(transform), transition }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && menuOpen) onMenuChange?.(false)
+      }}
+      className={`sortable-row ${isDragging ? 'is-dragging' : ''} ${isOver && !isDragging ? 'is-over' : ''}`}
     >
-      {!disabled && (
-        <Button
-          variant="ghost"
-          ref={setActivatorNodeRef}
-          className="touch-none px-2"
-          {...attributes}
-          {...listeners}
-          aria-label={`Déplacer ${label}`}
-        >
-          <span aria-hidden="true">⠿</span>
-        </Button>
+      {menu && (
+        <div id={`actions-${id}`} className="swipe-menu" inert={!menuOpen} aria-hidden={!menuOpen}>
+          {menu}
+        </div>
       )}
-      {children}
+      <div
+        className={`row-content ${menu ? 'swipe-content' : ''}`}
+        style={{
+          transform: menu ? `translateX(${slide ?? (menuOpen ? -menuWidth : 0)}px)` : undefined,
+          transition: slide !== undefined ? 'none' : undefined,
+        }}
+        onPointerDown={beginSwipe}
+        onPointerMove={moveSwipe}
+        onPointerUp={finishSwipe}
+        onPointerCancel={() => { gesture.current = null; setSlide(undefined) }}
+        onPointerLeave={() => { if (!gesture.current?.locked) gesture.current = null }}
+      >
+        {!disabled && (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            className="row-icon touch-none"
+            {...attributes}
+            {...listeners}
+            aria-label={`Déplacer ${label}`}
+          >
+            <GripVertical size={19} />
+          </button>
+        )}
+        {menu && (
+          <button
+            type="button"
+            className="row-icon"
+            aria-label={`Actions pour ${label}`}
+            aria-expanded={menuOpen}
+            aria-controls={`actions-${id}`}
+            onClick={() => onMenuChange?.(!menuOpen)}
+          >
+            <Ellipsis size={18} />
+          </button>
+        )}
+        {children}
+      </div>
     </li>
   )
 }
 
-export function CategoryDrop({ id, label }: { id: string; label: string }) {
-  const { setNodeRef, isOver, active } = useDroppable({ id })
-  if (!active) return null
-  return (
-    <div ref={setNodeRef} className={`min-h-11 rounded-lg border border-dashed p-2 ${isOver ? 'border-ring bg-muted' : 'border-border'}`}>
-      {label}
-    </div>
-  )
+export function CategoryDrop({ id, children }: { id: string; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return <section ref={setNodeRef} className={`list-group ${isOver ? 'is-over' : ''}`}>{children}</section>
 }

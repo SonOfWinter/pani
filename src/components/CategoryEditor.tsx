@@ -1,31 +1,25 @@
+import { CategoryLabel } from './CategoryLabel'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Reorder, SortableRow } from './Reorder'
 import { moveCategory } from '../data/order'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { Category, CategoryColor, CategoryIcon } from '../data/database'
-import { colors, deleteCategory, icons, saveCategory } from '../data/categories'
+import { useState, type FormEvent } from 'react'
+import type { Category } from '../data/database'
+import { categoryColor, deleteCategory, icons, saveCategory } from '../data/categories'
 import { Button } from './ui/button'
 
-export function CategoryEditor({ categories, onClose }: { categories: Category[]; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
+export function CategoryEditor({ categories }: { categories: Category[] }) {
   const [id, setId] = useState<string>()
   const [name, setName] = useState('')
-  const [color, setColor] = useState<CategoryColor>('green')
-  const [icon, setIcon] = useState<CategoryIcon>('basket')
+  const [color, setColor] = useState('#7d9b92')
+  const [emoji, setEmoji] = useState('🧺')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    const node = dialog.current
-    node?.showModal()
-    return () => node?.close()
-  }, [])
 
   function edit(category?: Category) {
     setId(category?.id)
     setName(category?.name ?? '')
-    setColor(category?.color ?? 'green')
-    setIcon(category?.icon ?? 'basket')
+    setColor(category ? categoryColor(category) : '#7d9b92')
+    setEmoji(category ? category.emoji ?? icons[category.icon].symbol : '🧺')
     setError('')
   }
 
@@ -46,20 +40,11 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    void run(() => saveCategory(name, color, icon, id))
+    void run(() => saveCategory(name, color, emoji, id))
   }
 
   return (
-    <dialog
-      ref={dialog}
-      className="pani-sheet"
-      aria-labelledby="categories-title"
-      onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 id="categories-title" className="text-xl font-semibold">Catégories</h2>
-        <Button variant="ghost" disabled={busy} onClick={onClose}>Fermer</Button>
-      </div>
+    <section aria-label="Gérer les catégories">
       <Reorder onDrop={({ active, over }) => {
         if (over && active.id !== over.id) {
           void run(() => moveCategory(String(active.id), String(over.id)), false)
@@ -69,9 +54,8 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
           <ul className="mb-4 grid gap-2">
             {categories.map((category, index) => (
               <SortableRow key={category.id} id={category.id} label={category.name} disabled={busy}>
-                <Button variant="outline" disabled={busy} onClick={() => edit(category)}>
-                  <span aria-hidden="true">{icons[category.icon].symbol}</span>
-                  {category.name}
+                <Button variant="ghost" className="min-w-0 flex-1 justify-start px-1 text-left" disabled={busy} onClick={() => edit(category)}>
+                  <CategoryLabel category={category} />
                   <span className="sr-only">, modifier</span>
                 </Button>
                 <Button variant="ghost" disabled={busy || index === 0} aria-label={`Monter ${category.name}`} onClick={() => void run(() => moveCategory(category.id, -1), false)}>↑</Button>
@@ -81,24 +65,27 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
           </ul>
         </SortableContext>
       </Reorder>
-      <form className="grid gap-3" onSubmit={submit}>
+      <form className="grid gap-4 rounded-lg border border-border bg-card p-4" onSubmit={submit}>
         <h3 className="font-semibold">{id ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</h3>
         <label className="grid gap-1">
           Nom
           <input className="pani-input" value={name} required onChange={(event) => setName(event.target.value)} />
         </label>
-        <label className="grid gap-1">
-          Couleur
-          <select className="pani-input" value={color} onChange={(event) => setColor(event.target.value as CategoryColor)}>
-            {Object.entries(colors).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          Icône
-          <select className="pani-input" value={icon} onChange={(event) => setIcon(event.target.value as CategoryIcon)}>
-            {Object.entries(icons).map(([key, value]) => <option key={key} value={key}>{value.symbol} {value.label}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-wrap gap-4">
+          <label className="grid gap-1">
+            Couleur
+            <input className="color-picker" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+          </label>
+          <label className="grid flex-1 gap-1">
+            Emoji
+            <input className="pani-input" value={emoji} maxLength={32} onChange={(event) => setEmoji(event.target.value)} />
+          </label>
+        </div>
+        <div role="group" aria-label="Suggestions d’emojis" className="flex flex-wrap gap-1">
+          {['🧺', '🍎', '🥦', '🥖', '🥛', '🧀', '🥩', '🐟', '🧴', '🧊', '🐾', '📦'].map((symbol) => (
+            <Button key={symbol} variant="ghost" aria-pressed={emoji === symbol} className="px-1.5 text-lg" onClick={() => setEmoji(symbol)}>{symbol}</Button>
+          ))}
+        </div>
         {error && <p role="alert">{error}</p>}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={busy}>Enregistrer</Button>
@@ -114,6 +101,6 @@ export function CategoryEditor({ categories, onClose }: { categories: Category[]
           )}
         </div>
       </form>
-    </dialog>
+    </section>
   )
 }

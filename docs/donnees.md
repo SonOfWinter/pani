@@ -2,8 +2,8 @@
 
 | Collection | Champs | Contraintes |
 | --- | --- | --- |
-| Articles | identifiant UUID, nom, quantité, catégorie, position, date de coche, création, modification | Nom normalisé par suppression des espaces périphériques et non vide. Quantité texte facultative. Catégorie nulle ou valide. Date de coche nulle pour un article à acheter. |
-| Catégories | identifiant UUID, nom, couleur, icône, position, création, modification | Nom non vide, unique après normalisation de casse et des espaces périphériques. Couleur et icône choisies dans des palettes prises en charge. |
+| Articles | identifiant UUID, nom, quantité, catégorie, position, date de coche, création, modification | Nom normalisé par suppression des espaces périphériques et non vide. Quantité texte facultative, affichée comme 1 si elle est vide. Les boutons ajustent la valeur numérique et conservent l’unité. Catégorie nulle ou valide. Date de coche nulle pour un article à acheter. |
+| Catégories | identifiant UUID, nom, couleur, icône, position, création, modification | Nom non vide, unique après normalisation de casse et des espaces périphériques. La couleur personnalisée et l’emoji sont facultatifs dans le stockage. Les anciennes catégories gardent leurs valeurs de palette et d’icône comme valeurs de repli. |
 | État local | dernière vue, révision des données, dernière sauvegarde réussie | La révision augmente à chaque mutation métier. Les préférences d’interface et les métadonnées de sauvegarde restent locales à l’installation. |
 
 « Sans catégorie » correspond à une référence nulle. Le groupe s’affiche après les catégories personnalisées et reste disponible comme destination. Dans chaque groupe, l’ordre des articles est commun aux deux vues. Cocher change uniquement la date de coche et celle de modification. Les dates se sérialisent en UTC.

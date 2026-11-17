@@ -13,11 +13,16 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await page.goto('/')
   await addItem(page, 'Tomates', '500 g')
   await addItem(page, 'Riz')
+  await page.getByRole('button', { name: 'Rechercher', exact: true }).click()
   await page.getByRole('searchbox').fill('toma')
   await expect(page.getByText('Tomates', { exact: true })).toBeVisible()
   await expect(page.getByText('Riz', { exact: true })).toBeHidden()
   await page.getByRole('searchbox').fill('')
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  await page.getByRole('checkbox', { name: /Tomates/ }).click()
+  await expect(page.getByText('1 article à acheter', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Annuler', exact: true }).click()
+  await expect(page.getByText('2 articles à acheter', { exact: true })).toBeVisible()
   await page.getByRole('checkbox', { name: /Tomates/ }).click()
   await expect(page.getByText('1 article à acheter', { exact: true })).toBeVisible()
   await expect.poll(() => page.evaluate(async () =>
@@ -79,4 +84,50 @@ test('restaure un export chiffré dans une installation vierge', async ({ page, 
   } finally {
     await newPage.close()
   }
+})
+
+
+test('ajuste la quantité, révèle les actions et dépose dans une catégorie vide', async ({ page }) => {
+  await page.goto('/')
+  await addItem(page, 'Pommes')
+  await page.getByRole('button', { name: 'Augmenter la quantité de Pommes' }).click()
+  const stepper = page.getByRole('group', { name: 'Quantité de Pommes' })
+  await expect(stepper.locator('output')).toHaveText('2')
+  await page.getByRole('button', { name: 'Diminuer la quantité de Pommes' }).click()
+  await expect(stepper.locator('output')).toHaveText('1')
+
+  const name = page.getByText('Pommes', { exact: true })
+  const itemBox = await name.boundingBox()
+  if (!itemBox) throw new Error('Article introuvable.')
+  const itemX = itemBox.x + itemBox.width / 2
+  const itemY = itemBox.y + itemBox.height / 2
+  await page.mouse.move(itemX, itemY)
+  await page.mouse.down()
+  await page.mouse.move(itemX - 70, itemY, { steps: 12 })
+  await page.mouse.up()
+  await expect(page.getByRole('button', { name: 'Modifier Pommes' })).toBeVisible()
+  await page.getByRole('button', { name: 'Fermer les actions' }).click()
+
+  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+  await page.getByRole('textbox', { name: 'Nom', exact: true }).fill('Fruits')
+  await page.getByLabel('Couleur', { exact: true }).fill('#008877')
+  await page.getByLabel('Emoji', { exact: true }).fill('🍇')
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+  await expect(page.getByText('Fruits', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  const category = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Fruits', exact: true }) })
+  await expect(category.getByText('Aucun article')).toBeVisible()
+
+  const handle = page.getByRole('button', { name: 'Déplacer Pommes' })
+  const source = await handle.boundingBox()
+  const target = await category.getByText('Aucun article').boundingBox()
+  if (!source || !target) throw new Error('Cible de dépôt introuvable.')
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 16 })
+  await page.mouse.up()
+  await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
+  await expect(category.getByText('🍇', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
 })

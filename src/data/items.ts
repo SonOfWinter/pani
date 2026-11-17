@@ -42,16 +42,36 @@ export async function deleteItem(id: string) {
   await database.mutate(() => database.items.delete(id))
 }
 
-export async function toggleItem(id: string) {
+export function quantityParts(quantity: string) {
+  const match = /^(\d+(?:[,.]\d+)?)(.*)$/.exec(quantity)
+  const count = match ? Number(match[1].replace(',', '.')) : 1
+  return {
+    count: Number.isSafeInteger(Math.trunc(count)) ? count : 1,
+    suffix: match?.[2] ?? (quantity ? ` ${quantity}` : ''),
+  }
+}
+
+export async function changeQuantity(id: string, delta: -1 | 1) {
   await database.mutate(async () => {
     const item = await database.items.get(id)
     if (!item) throw new Error('Cet article a été supprimé.')
+    const { count, suffix } = quantityParts(item.quantity)
+    if (delta < 0 && count <= 1) return
+    const next = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, count + delta))
+    const quantity = String(next).replace('.', ',') + suffix
+    await database.items.put({ ...item, quantity, updatedAt: new Date().toISOString() })
+  })
+}
+
+export async function setItemChecked(id: string, checked: boolean, expected: string | null) {
+  return database.mutate(async () => {
+    const item = await database.items.get(id)
+    if (!item) throw new Error('Cet article a été supprimé.')
+    if (item.checkedAt !== expected) return item.checkedAt
     const updatedAt = new Date().toISOString()
-    await database.items.put({
-      ...item,
-      checkedAt: item.checkedAt === null ? updatedAt : null,
-      updatedAt,
-    })
+    const checkedAt = checked ? updatedAt : null
+    await database.items.put({ ...item, checkedAt, updatedAt })
+    return checkedAt
   })
 }
 

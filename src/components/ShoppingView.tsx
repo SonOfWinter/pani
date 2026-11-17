@@ -1,13 +1,19 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { Category, Item } from '../data/database'
-import { colors, icons } from '../data/categories'
-import { deleteCheckedItems, toggleItem } from '../data/items'
+import { Undo2 } from 'lucide-react'
+import { QuantityStepper } from './QuantityStepper'
+import { CategoryLabel } from './CategoryLabel'
+import { changeQuantity, deleteCheckedItems, setItemChecked } from '../data/items'
 import { Button } from './ui/button'
 
-function ShoppingRow({ item, onToggle }: { item: Item; onToggle: (item: Item) => void }) {
+function ShoppingRow({ item, onToggle, onQuantity }: {
+  item: Item
+  onToggle: (item: Item) => void
+  onQuantity: (id: string, delta: -1 | 1) => void
+}) {
   return (
-    <li>
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-2">
+    <li className="flex items-center gap-2 py-1 pr-2">
+      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 pl-3">
         <input
           id={`purchase-${item.id}`}
           type="checkbox"
@@ -15,17 +21,18 @@ function ShoppingRow({ item, onToggle }: { item: Item; onToggle: (item: Item) =>
           checked={item.checkedAt !== null}
           onChange={() => onToggle(item)}
         />
-        <span className="min-w-0 break-words">
+        <span className="min-w-0 flex-1 break-words">
           {item.name}
-          {item.quantity && <span className="ml-2 text-sm text-muted-foreground">{item.quantity}</span>}
         </span>
       </label>
+      <QuantityStepper item={item} onChange={(delta) => onQuantity(item.id, delta)} />
     </li>
   )
 }
 
 export function ShoppingView({ items, categories }: { items: Item[]; categories: Category[] }) {
   const focusAfterChange = useRef<{ id: string; destination: string } | null>(null)
+  const [lastCheck, setLastCheck] = useState<{ id: string; name: string; checkedAt: string }>()
   const [error, setError] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const pending = items.filter((item) => item.checkedAt === null)
@@ -52,7 +59,9 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
       focusAfterChange.current = { id: item.id, destination }
     }
     try {
-      await toggleItem(item.id)
+      const checkedAt = await setItemChecked(item.id, item.checkedAt === null, item.checkedAt)
+      if (checkedAt && !item.checkedAt) setLastCheck({ id: item.id, name: item.name, checkedAt })
+      else setLastCheck((last) => last?.id === item.id ? undefined : last)
       setError('')
       setAnnouncement(`${item.name} : achat ${item.checkedAt ? 'décoché' : 'coché'}.`)
     } catch {
@@ -61,10 +70,20 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
     }
   }
 
+  async function adjustQuantity(id: string, delta: -1 | 1) {
+    try {
+      await changeQuantity(id, delta)
+      setError('')
+    } catch {
+      setError('Impossible de modifier la quantité.')
+    }
+  }
+
   async function clearChecked() {
     if (!window.confirm('Retirer les articles pris de la liste ?')) return
     try {
       await deleteCheckedItems(checked.map((item) => item.id))
+      setLastCheck(undefined)
       setError('')
       setAnnouncement('Articles pris retirés.')
     } catch {
@@ -72,21 +91,40 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
     }
   }
 
+  const undoable = lastCheck && checked.some((item) => item.id === lastCheck.id && item.checkedAt === lastCheck.checkedAt)
+
+  async function undo() {
+    if (!lastCheck) return
+    try {
+      const result = await setItemChecked(lastCheck.id, false, lastCheck.checkedAt)
+      if (result !== null) throw new Error('Cet article a changé.')
+      setLastCheck(undefined)
+      setError('')
+      setAnnouncement(`${lastCheck.name} est de nouveau à acheter.`)
+      requestAnimationFrame(() => document.getElementById(`purchase-${lastCheck.id}`)?.focus())
+    } catch {
+      setError('Impossible d’annuler cette coche.')
+    }
+  }
+
   return (
     <div>
       <p role="status" className="sr-only">{announcement}</p>
+      {undoable && (
+        <div className="undo-bar">
+          <p>{lastCheck.name} coché.</p>
+          <Button variant="ghost" onClick={() => void undo()}><Undo2 size={17} /> Annuler</Button>
+        </div>
+      )}
       {error && <p role="alert">{error}</p>}
       {pending.length === 0 && <p className="rounded-lg bg-card p-5">
         {checked.length ? 'Courses terminées.' : 'Aucun article à acheter.'}
       </p>}
       {groups.map(({ category, items }) => (
-        <section key={category?.id ?? 'none'} className="mb-6">
-          <h2 className={`mb-2 rounded-lg px-2 py-1 font-semibold ${category ? colors[category.color].style : ''}`}>
-            {category && <span aria-hidden="true" className="mr-2">{icons[category.icon].symbol}</span>}
-            {category?.name ?? 'Sans catégorie'}
-          </h2>
-          <ul className="divide-y divide-muted rounded-lg bg-card">
-            {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} />)}
+        <section key={category?.id ?? 'none'} className="list-group">
+          <h2 className="category-heading"><CategoryLabel category={category} /></h2>
+          <ul className="divide-y divide-border">
+            {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
           </ul>
         </section>
       ))}
@@ -94,7 +132,7 @@ export function ShoppingView({ items, categories }: { items: Item[]; categories:
         <details className="mt-6 rounded-lg bg-card p-3">
           <summary id="checked-items" className="min-h-11 cursor-pointer py-2 font-semibold">Articles pris ({checked.length})</summary>
           <ul className="mb-3 divide-y divide-muted">
-            {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} />)}
+            {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
           </ul>
           <Button variant="outline" onClick={() => void clearChecked()}>Retirer les articles pris</Button>
         </details>

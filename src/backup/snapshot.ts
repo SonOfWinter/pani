@@ -1,4 +1,4 @@
-import { colors, icons } from '../data/categories'
+import { colorPattern, emojiPattern, icons } from '../data/categories'
 import { database, type Category, type Item } from '../data/database'
 import { decryptBackup, encryptBackup, maxEnvelopeLength } from './envelope'
 
@@ -63,9 +63,14 @@ export function validateSnapshot(value: unknown): Snapshot {
     const entry = record(value)
     const categoryName = name(entry.name)
     const normalizedName = unique(normalizedNames, categoryName.toLocaleLowerCase('fr'))
-    requireValid(typeof entry.color === 'string' && Object.hasOwn(colors, entry.color))
+    requireValid(typeof entry.color === 'string' && ['green', 'amber', 'blue', 'rose'].includes(entry.color))
     requireValid(typeof entry.icon === 'string' && Object.hasOwn(icons, entry.icon))
+    const { customColor, emoji } = entry
+    requireValid(customColor === undefined || (typeof customColor === 'string' && colorPattern.test(customColor)))
+    requireValid(emoji === undefined || (typeof emoji === 'string' && emojiPattern.test(emoji)))
     return {
+      customColor,
+      emoji,
       id: unique(categoryIds, id(entry.id)),
       name: categoryName,
       normalizedName,
