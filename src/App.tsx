@@ -1,3 +1,4 @@
+import { BackupPanel } from './components/BackupPanel'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
 import { moveItem } from './data/order'
@@ -46,6 +47,7 @@ export function App() {
   )
   const [announcement, setAnnouncement] = useState('')
   const [error, setError] = useState('')
+  const [backupOpen, setBackupOpen] = useState(false)
   const [categoriesOpen, setCategoriesOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
@@ -96,6 +98,7 @@ export function App() {
         <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
           {remaining} {remaining === 1 ? 'article à acheter' : 'articles à acheter'}
         </p>
+        <Button variant="ghost" className="mt-2" disabled={!result?.list} onClick={() => setBackupOpen(true)}>Sauvegardes</Button>
       </header>
       <div role="group" aria-label="Mode" className="mb-7 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
         {modes.map(({ value, label }) => (
@@ -211,6 +214,7 @@ export function App() {
         />
       )}
       {categoriesOpen && <CategoryEditor categories={categories} onClose={() => setCategoriesOpen(false)} />}
+      {backupOpen && <BackupPanel hasData={items.length + categories.length > 0} onClose={() => setBackupOpen(false)} />}
     </main>
   )
 }
