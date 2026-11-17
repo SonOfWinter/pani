@@ -206,3 +206,44 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await page.getByRole('button', { name: 'Courses', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Fruits', exact: true })).toHaveCSS('background-color', 'rgb(0, 136, 119)')
 })
+
+test('une catégorie reste dans sa colonne pendant un déplacement latéral', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+
+  for (const name of ['Fruits', 'Pain', 'Boissons']) {
+    await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
+    const popup = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+    await popup.getByRole('textbox', { name: 'Nom', exact: true }).fill(name)
+    await popup.getByRole('button', { name: 'Enregistrer', exact: true }).click()
+    await expect(popup).toBeHidden()
+  }
+
+  const row = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Modifier Pain' }) })
+  const followingRow = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Modifier Boissons' }) })
+  const handle = await row.getByRole('button', { name: 'Déplacer Pain' }).boundingBox()
+  const initial = await row.boundingBox()
+  const following = await followingRow.boundingBox()
+  if (!handle || !initial || !following) throw new Error('Catégories introuvables.')
+
+  const x = handle.x + handle.width / 2
+  const y = handle.y + handle.height / 2
+  const right = (page.viewportSize()?.width ?? 390) - 5
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  for (const side of [right, 5, right]) {
+    await page.mouse.move(side, y, { steps: 10 })
+    await expect.poll(async () => {
+      const box = await row.boundingBox()
+      return box ? Math.round(box.x - initial.x) : null
+    }).toBe(0)
+    await expect.poll(async () => {
+      const box = await followingRow.boundingBox()
+      return box ? Math.round(box.y - following.y) : null
+    }).toBe(0)
+  }
+
+  await page.mouse.move(right, following.y + following.height / 2, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.getByRole('listitem')).toHaveText([/Fruits/, /Boissons/, /Pain/])
+})

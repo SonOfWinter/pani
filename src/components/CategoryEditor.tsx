@@ -114,7 +114,7 @@ export function CategoryEditor({ categories }: { categories: Category[] }) {
       <p role="status" className="sr-only">{announcement}</p>
       {error && <p role="alert">{error}</p>}
       {categories.length === 0 && <p className="empty-group">Aucune catégorie.</p>}
-      <Reorder showPreview={false} onDrop={({ active, over }) => {
+      <Reorder verticalOnly showPreview={false} onDrop={({ active, over }) => {
         if (over && active.id !== over.id) void reorder(String(active.id), String(over.id))
       }}>
         <SortableContext items={categories.map((category) => category.id)} strategy={verticalListSortingStrategy}>

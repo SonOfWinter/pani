@@ -1,16 +1,20 @@
 import {
-  closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
-  useDroppable, useSensor, useSensors, type DragEndEvent,
+  AutoScrollActivator, closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
+  useDroppable, useSensor, useSensors, type DragEndEvent, type Modifier,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, ShoppingCart } from 'lucide-react'
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 
-export function Reorder({ children, onDrop, showPreview = true }: {
+const verticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
+const verticalModifiers = [verticalAxis]
+
+export function Reorder({ children, onDrop, showPreview = true, verticalOnly = false }: {
   children: ReactNode
   onDrop: (event: DragEndEvent) => void
   showPreview?: boolean
+  verticalOnly?: boolean
 }) {
   const [label, setLabel] = useState<string>()
   const sensors = useSensors(
@@ -20,8 +24,10 @@ export function Reorder({ children, onDrop, showPreview = true }: {
   return (
     <DndContext
       sensors={sensors}
+      modifiers={verticalOnly ? verticalModifiers : undefined}
+      autoScroll={verticalOnly ? { activator: AutoScrollActivator.DraggableRect } : true}
       collisionDetection={(args) => {
-        if (!args.pointerCoordinates) return closestCenter(args)
+        if (verticalOnly || !args.pointerCoordinates) return closestCenter(args)
         const collisions = pointerWithin(args)
         const rows = collisions.filter(({ id }) => id !== args.active.id && !String(id).startsWith('category:'))
         if (rows.length) return rows
