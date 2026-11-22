@@ -7,8 +7,8 @@ import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
 import { BottomNav } from './components/BottomNav'
 import { CategoryEditor } from './components/CategoryEditor'
-import { categoryBackground, CategoryLabel } from './components/CategoryLabel'
 import { ItemEditor } from './components/ItemEditor'
+import { CategoryDisclosure } from './components/CategoryDisclosure'
 import { QuantityStepper } from './components/QuantityStepper'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
 import { ShoppingView } from './components/ShoppingView'
@@ -48,6 +48,7 @@ export function App() {
   const cloud = useCloudBackup(result?.list?.state)
   const [backupOpen, setBackupOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [collapsedCategories, setCollapsedCategories] = useState(new Set<string | null>())
   const [openMenu, setOpenMenu] = useState<string>()
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
 
@@ -112,8 +113,20 @@ export function App() {
 
   async function switchMode(next: Mode) {
     setOpenMenu(undefined)
-    if (next !== 'list') setQuery('')
+    if (next !== 'list') {
+      setQuery('')
+      setCollapsedCategories(new Set())
+    }
     await run(() => database.setMode(next), 'Impossible de changer de vue. Réessayez.')
+  }
+
+  function toggleCategory(id: string | null) {
+    setOpenMenu(undefined)
+    setCollapsedCategories((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
   }
 
   function revealFocusedControl(event: FocusEvent<HTMLDivElement>) {
@@ -174,7 +187,11 @@ export function App() {
                   aria-label="Rechercher un article"
                   placeholder="Rechercher"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setQuery(value)
+                    if (value.trim() && collapsedCategories.size) setCollapsedCategories(new Set())
+                  }}
                   onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
                 />
                 <Button id="add-item" aria-label="Ajouter un article" className="px-2.5" onClick={() => { setOpenMenu(undefined); setEditor({ item: null }) }}>
@@ -193,77 +210,84 @@ export function App() {
                   void reorder(item, { categoryId: targetId.slice(9) || null })
                 }
               }}>
-                {groups.map(({ category, items: groupItems }) => (
-                  <CategoryDrop key={category?.id ?? 'none'} id={`category:${category?.id ?? ''}`}>
-                    <h2 className="category-heading" style={categoryBackground(category)}><CategoryLabel category={category} /></h2>
-                    {groupItems.length === 0 && (
-                      <p className="empty-group">{!category && !items.length ? 'Votre liste est vide.' : 'Aucun article'}</p>
-                    )}
-                    <SortableContext items={groupItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                      <ul className="divide-y divide-border">
-                        {groupItems.map((item) => (
-                          <SortableRow
-                            key={item.id}
-                            id={item.id}
-                            label={item.name}
-                            disabled={Boolean(term)}
-                            menuOpen={openMenu === item.id}
-                            onSwipeRight={() => void addPurchase(item)}
-                            onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
-                            menu={
-                              <>
-                                <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={() => void addPurchase(item)}><ShoppingBasket size={18} /></button>
-                                <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
-                                <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
-                                <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
-                              </>
-                            }
-                          >
-                            <button
-                              type="button"
-                              data-swipe-trigger
-                              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
-                              aria-label={`Actions pour ${item.name}`}
-                              aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
-                              aria-expanded={openMenu === item.id}
-                              aria-controls={`actions-${item.id}`}
-                              aria-keyshortcuts="Alt+ArrowRight"
-                              onKeyDown={(event) => {
-                                if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
-                                event.preventDefault()
-                                void addPurchase(item)
-                              }}
-                              onClick={(event) => {
-                                const open = openMenu !== item.id
-                                setOpenMenu(open ? item.id : undefined)
-                                if (open && event.detail === 0) {
-                                  requestAnimationFrame(() => document
-                                    .getElementById(`actions-${item.id}`)
-                                    ?.querySelector('button')
-                                    ?.focus({ preventScroll: true }))
+                {groups.map(({ category, items: groupItems }) => {
+                  const categoryId = category?.id ?? null
+                  const expanded = Boolean(term) || !collapsedCategories.has(categoryId)
+                  return (
+                    <CategoryDrop key={categoryId ?? 'none'} id={`category:${categoryId ?? ''}`}>
+                      <CategoryDisclosure category={category} count={groupItems.length} expanded={expanded}
+                        searching={Boolean(term)} onToggle={() => toggleCategory(categoryId)}>
+                        {groupItems.length === 0 && (
+                          <p className="empty-group">{!category && !items.length ? 'Votre liste est vide.' : 'Aucun article'}</p>
+                        )}
+                        <SortableContext items={groupItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                          <ul className="divide-y divide-border">
+                            {groupItems.map((item) => (
+                              <SortableRow
+                                key={item.id}
+                                id={item.id}
+                                label={item.name}
+                                disabled={Boolean(term) || !expanded}
+                                dropDisabled={!expanded}
+                                menuOpen={openMenu === item.id}
+                                onSwipeRight={() => void addPurchase(item)}
+                                onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
+                                menu={
+                                  <>
+                                    <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={() => void addPurchase(item)}><ShoppingBasket size={18} /></button>
+                                    <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
+                                    <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
+                                    <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
+                                  </>
                                 }
-                              }}
-                            >
-                              <span className="min-w-0 break-words">{item.name}</span>
-                              {item.shopping && (
-                                <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
-                                  <span className="sr-only">Dans Courses</span>
-                                  <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
-                                  </svg>
-                                </span>
-                              )}
-                            </button>
-                            <QuantityStepper item={item} onChange={(delta) => void run(
-                              () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
-                            )} />
-                          </SortableRow>
-                        ))}
-                      </ul>
-                    </SortableContext>
-                  </CategoryDrop>
-                ))}
+                              >
+                                <button
+                                  type="button"
+                                  data-swipe-trigger
+                                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
+                                  aria-label={`Actions pour ${item.name}`}
+                                  aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
+                                  aria-expanded={openMenu === item.id}
+                                  aria-controls={`actions-${item.id}`}
+                                  aria-keyshortcuts="Alt+ArrowRight"
+                                  onKeyDown={(event) => {
+                                    if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
+                                    event.preventDefault()
+                                    void addPurchase(item)
+                                  }}
+                                  onClick={(event) => {
+                                    const open = openMenu !== item.id
+                                    setOpenMenu(open ? item.id : undefined)
+                                    if (open && event.detail === 0) {
+                                      requestAnimationFrame(() => document
+                                        .getElementById(`actions-${item.id}`)
+                                        ?.querySelector('button')
+                                        ?.focus({ preventScroll: true }))
+                                    }
+                                  }}
+                                >
+                                  <span className="min-w-0 break-words">{item.name}</span>
+                                  {item.shopping && (
+                                    <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                                      <span className="sr-only">Dans Courses</span>
+                                      <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                </button>
+                                <QuantityStepper item={item} onChange={(delta) => void run(
+                                  () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
+                                )} />
+                              </SortableRow>
+                            ))}
+                          </ul>
+                        </SortableContext>
+                      </CategoryDisclosure>
+                    </CategoryDrop>
+                  )
+                })}
               </Reorder>
             </>
           )}

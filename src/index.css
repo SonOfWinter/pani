@@ -225,6 +225,49 @@ html:has(.pani-modal[open]) {
   @apply flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold;
 }
 
+.category-heading-toggle {
+  padding: 0;
+}
+
+.category-heading-toggle button {
+  @apply relative flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1 text-left;
+}
+
+/* Extend the hit area into the space between groups without enlarging the banner. */
+.category-heading-toggle button::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 -4px;
+  min-height: 44px;
+}
+
+.category-heading-toggle button[aria-disabled="true"] {
+  cursor: default;
+}
+
+.category-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease;
+}
+
+.category-panel[data-expanded="true"] {
+  grid-template-rows: 1fr;
+}
+
+.category-panel-content {
+  min-height: 0;
+  overflow: clip;
+}
+
+.category-chevron {
+  transition: transform 180ms ease;
+}
+
+.category-heading-toggle button[aria-expanded="false"] .category-chevron {
+  transform: rotate(-90deg);
+}
+
 .color-picker {
   @apply h-11 w-15 cursor-pointer rounded-lg border border-border bg-card p-1;
 }
@@ -309,6 +352,8 @@ html:has(.pani-modal[open]) {
 
 @media (prefers-reduced-motion: reduce) {
   .swipe-content,
+  .category-panel,
+  .category-chevron,
   .bottom-nav-indicator,
   .screen-header,
   .screen-header h1,

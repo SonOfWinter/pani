@@ -62,10 +62,11 @@ export function Reorder({ children, onDrop, showPreview = true, verticalOnly = f
   )
 }
 
-export function SortableRow({ id, label, disabled = false, menu, menuOpen = false, onMenuChange, onSwipeRight, appearance, children }: {
+export function SortableRow({ id, label, disabled = false, dropDisabled = false, menu, menuOpen = false, onMenuChange, onSwipeRight, appearance, children }: {
   id: string
   label: string
   disabled?: boolean
+  dropDisabled?: boolean
   menu?: ReactNode
   menuOpen?: boolean
   onMenuChange?: (open: boolean) => void
@@ -77,7 +78,7 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
   const gesture = useRef<{ id: number; x: number; y: number; locked: boolean } | null>(null)
   const [slide, setSlide] = useState<number>()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({ id, disabled, data: { label } })
+    useSortable({ id, disabled: { draggable: disabled, droppable: dropDisabled }, data: { label } })
   const menuWidth = 192
   const basketWidth = 44
   const coloredRow = Boolean(appearance)

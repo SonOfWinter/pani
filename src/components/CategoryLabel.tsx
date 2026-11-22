@@ -6,7 +6,7 @@ export function CategoryLabel({ category }: { category: Category | null }) {
   return (
     <>
       <span aria-hidden="true">{category.emoji ?? icons[category.icon].symbol}</span>
-      <span className="break-words">{category.name}</span>
+      <span className="min-w-0 break-words">{category.name}</span>
     </>
   )
 }
