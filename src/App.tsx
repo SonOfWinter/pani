@@ -1,7 +1,7 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Cloud, Pencil, Plus, ShoppingBasket, Trash2, Undo2, X } from 'lucide-react'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState, type FocusEvent } from 'react'
 import { toast } from 'sonner'
 import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
@@ -23,6 +23,18 @@ import { useUndoHistory } from './lib/useUndoHistory'
 import type { RecordUndo } from './data/undo'
 
 export function App() {
+  const screenTop = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const top = screenTop.current
+    if (!top) return
+    function syncHeader() {
+      top?.toggleAttribute('data-compact', window.scrollY > 0)
+    }
+    syncHeader()
+    window.addEventListener('scroll', syncHeader, { passive: true })
+    return () => window.removeEventListener('scroll', syncHeader)
+  }, [])
+
   const confirm = useConfirm()
   const undo = useUndoHistory()
   const recordListUndo: RecordUndo = (action) => undo.record('list', action)
@@ -104,11 +116,22 @@ export function App() {
     await run(() => database.setMode(next), 'Impossible de changer de vue. Réessayez.')
   }
 
+  function revealFocusedControl(event: FocusEvent<HTMLDivElement>) {
+    const control = event.target
+    if (control.closest('dialog')) return
+    requestAnimationFrame(() => {
+      const top = screenTop.current
+      if (!top || document.activeElement !== control) return
+      const bottom = Math.max(...Array.from(top.children, (child) => child.getBoundingClientRect().bottom))
+      const { top: controlTop } = control.getBoundingClientRect()
+      if (controlTop < bottom + 6) window.scrollBy(0, controlTop - bottom - 6)
+    })
+  }
+
   return (
     <>
       <main className="pani-shell mx-auto max-w-xl">
-        <UpdateNotice />
-        <div key={mode} className="screen-transition">
+        <div ref={screenTop} className="screen-top">
           <header className="screen-header">
             <div>
               <h1>{mode === 'list' ? 'Liste' : mode === 'shopping' ? 'Courses' : 'Catégories'}</h1>
@@ -120,7 +143,7 @@ export function App() {
                 </p>
               )}
             </div>
-            <div className="flex">
+            <div className="flex shrink-0">
               <Button variant="ghost" className="px-2 aria-disabled:opacity-50" aria-label="Annuler la dernière action"
                 aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undo.undo(mode) }}>
                 <Undo2 size={21} aria-hidden="true" />
@@ -135,6 +158,9 @@ export function App() {
               </Button>
             </div>
           </header>
+          <UpdateNotice />
+        </div>
+        <div key={mode} className="screen-transition" onFocus={revealFocusedControl}>
           {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
           {!result && <p role="status">Ouverture de la liste…</p>}
           {result?.list && mode === 'categories' && <CategoryEditor categories={categories} recordUndo={(action) => undo.record('categories', action)} />}
