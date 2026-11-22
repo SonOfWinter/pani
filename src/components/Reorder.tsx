@@ -78,7 +78,7 @@ export function SortableRow({ id, label, disabled = false, menu, menuOpen = fals
   const [slide, setSlide] = useState<number>()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
     useSortable({ id, disabled, data: { label } })
-  const menuWidth = 144
+  const menuWidth = 192
   const basketWidth = 44
   const coloredRow = Boolean(appearance)
 

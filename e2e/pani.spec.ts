@@ -29,6 +29,30 @@ async function swipeIntoShopping(page: Page, name: string) {
   await page.mouse.up()
 }
 
+async function waitForOfflineShell(page: Page) {
+  await expect.poll(() => page.evaluate(async () =>
+    Boolean((await navigator.serviceWorker.getRegistration())?.active),
+  )).toBe(true)
+  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+}
+
+test('ajoute un article aux courses au clavier et le retrouve après une relance hors ligne', async ({ page, context }) => {
+  await page.goto('/')
+  await addItem(page, 'Avoine')
+  await page.getByRole('button', { name: 'Actions pour Avoine' }).press('Enter')
+  const add = page.getByRole('button', { name: 'Ajouter Avoine aux courses' })
+  await expect(add).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Avoine ajouté aux courses.', { exact: true })).toBeVisible()
+  await waitForOfflineShell(page)
+
+  await context.setOffline(true)
+  await page.reload()
+  await page.getByRole('button', { name: 'Courses', exact: true }).press('Enter')
+  await expect(page.getByRole('checkbox', { name: 'Avoine' })).toBeVisible()
+})
+
 test('prépare les achats puis termine ses courses après une relance hors ligne', async ({ page, context }) => {
   await page.goto('/')
   await addItem(page, 'Tomates', '500 g')
@@ -55,11 +79,7 @@ test('prépare les achats puis termine ses courses après une relance hors ligne
   await expect(page.getByText('2 articles à acheter', { exact: true })).toBeVisible()
   await page.getByRole('checkbox', { name: /Tomates/ }).click()
   await expect(page.getByText('1 article à acheter', { exact: true })).toBeVisible()
-  await expect.poll(() => page.evaluate(async () =>
-    Boolean((await navigator.serviceWorker.getRegistration())?.active),
-  )).toBe(true)
-  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) await page.reload()
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  await waitForOfflineShell(page)
 
   await context.setOffline(true)
   await page.reload()
