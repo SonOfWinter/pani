@@ -51,6 +51,11 @@
   padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
 }
 
+.update-notice {
+  @apply sticky z-10 mb-4 rounded-lg border border-border bg-card p-3 text-sm;
+  top: max(0.5rem, env(safe-area-inset-top));
+}
+
 .pani-input {
   @apply min-h-11 rounded-lg border border-border bg-card px-3 text-base;
 }

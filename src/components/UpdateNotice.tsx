@@ -23,10 +23,10 @@ export function UpdateNotice() {
 
   if (!needRefresh) return null
   return (
-    <aside className="mx-auto max-w-xl px-5 pb-4" aria-label="Mise à jour">
+    <aside className="update-notice" aria-label="Mise à jour">
       <p role="status">Une mise à jour de Pani est prête.</p>
       {error && <p role="alert">Impossible d’appliquer la mise à jour. Terminez votre saisie et réessayez.</p>}
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         <Button disabled={busy} onClick={() => void apply()}>Mettre à jour</Button>
         <Button variant="ghost" disabled={busy} onClick={() => setNeedRefresh(false)}>Plus tard</Button>
       </div>

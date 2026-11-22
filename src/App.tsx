@@ -12,6 +12,7 @@ import { ItemEditor } from './components/ItemEditor'
 import { QuantityStepper } from './components/QuantityStepper'
 import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
 import { ShoppingView } from './components/ShoppingView'
+import { UpdateNotice } from './components/UpdateNotice'
 import { useConfirm } from './components/ui/confirm'
 import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
@@ -101,6 +102,7 @@ export function App() {
   return (
     <>
       <main className="pani-shell mx-auto max-w-xl">
+        <UpdateNotice />
         <div key={mode} className="screen-transition">
           <header className="screen-header">
             <div>

@@ -4,6 +4,10 @@
 
 Soft Native reprend les habitudes iPhone. Fond noir, texte blanc et accent bordeaux vif. Le fond des lignes de catégories et des en-têtes fins et arrondis de Liste et Courses reprend leur couleur. Le nom et l’emoji restent lisibles grâce à un texte noir ou blanc selon le contraste. Les listes se composent de lignes séparées, sans encadrement de section. Les séparateurs sont fins et la police suit le système. Les couleurs, espacements, rayons et états de focus passent par des variables CSS. Écarter les motifs Material Design.
 
+## Mise à jour PWA
+
+Quand une version est prête, un bandeau apparaît en haut du contenu et reste visible au défilement sous la zone sûre. « Mettre à jour » et « Plus tard » sont accessibles dans Liste, Courses et Catégories. La mise à jour reste déclenchée par l’utilisateur après la saisie et les écritures en cours.
+
 ## Écrans et gestes
 
 | Écran | Parcours |
