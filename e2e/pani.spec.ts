@@ -275,6 +275,9 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await page.mouse.up()
   const action = page.getByRole('button', { name: 'Modifier Pommes' })
   await expect(action).toBeVisible()
+  const swipeRow = page.locator('.swipe-row').filter({ has: action })
+  await expect(swipeRow.locator('.swipe-content')).toHaveCSS('border-top-left-radius', /^(?!0px$)/)
+  await expect(swipeRow.locator('.swipe-menu')).toHaveCSS('border-top-right-radius', /^(?!0px$)/)
   await expect(page.getByRole('button', { name: 'Actions pour Pommes' })).toHaveAttribute('aria-expanded', 'true')
   await expect(page.getByRole('button', { name: 'Monter Pommes' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Descendre Pommes' })).toHaveCount(0)
@@ -500,4 +503,28 @@ test('annule cinq actions par écran et retire un ajout modifié dans Courses ho
   await page.reload()
   await expect(page.getByRole('button', { name: 'Actions pour Lentilles' })).toBeVisible()
   await expect(undo).toBeDisabled()
+})
+
+test('affiche les notifications au-dessus de la navigation sur un petit écran', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('/')
+  const name = 'Biscuits au chocolat noir et aux noisettes entières'
+  await addItem(page, name)
+  await page.getByRole('button', { name: `Actions pour ${name}` }).press('Alt+ArrowRight')
+  const toast = page.getByText(`${name} ajouté aux courses.`, { exact: true })
+  await expect(toast).toBeVisible()
+
+  const navigation = page.getByRole('navigation', { name: 'Navigation principale' })
+  for (const mode of ['Liste', 'Courses', 'Catégories']) {
+    const tab = navigation.getByRole('button', { name: mode, exact: true })
+    await tab.click()
+    await expect(tab).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(async () => {
+      const bounds = await toast.boundingBox()
+      const nav = await navigation.boundingBox()
+      const header = await page.getByRole('button', { name: 'Sauvegardes' }).boundingBox()
+      return Boolean(bounds && nav && header && bounds.y > header.y + header.height &&
+        bounds.y + bounds.height < nav.y)
+    }).toBe(true)
+  }
 })

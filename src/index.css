@@ -46,6 +46,12 @@
   }
 }
 
+#root {
+  --bottom-nav-button-height: 3rem;
+  --bottom-nav-padding: 0.5rem;
+  --bottom-nav-height: calc(var(--bottom-nav-button-height) + 2 * var(--bottom-nav-padding) + 1px + env(safe-area-inset-bottom));
+}
+
 .pani-shell {
   padding-block: max(2rem, env(safe-area-inset-top)) calc(6rem + env(safe-area-inset-bottom));
   padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
@@ -163,11 +169,13 @@ html:has(.pani-modal[open]) {
 }
 
 .bottom-nav-inner {
-  @apply relative isolate mx-auto grid max-w-xl grid-cols-3 gap-1 px-3 py-2;
+  @apply relative isolate mx-auto grid max-w-xl grid-cols-3 gap-1 px-3;
+  padding-block: var(--bottom-nav-padding);
 }
 
 .bottom-nav button {
-  @apply flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-medium text-muted-foreground;
+  @apply flex flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-medium text-muted-foreground;
+  min-height: var(--bottom-nav-button-height);
 }
 
 .bottom-nav button[aria-pressed="true"] {
@@ -225,7 +233,7 @@ html:has(.pani-modal[open]) {
 }
 
 .swipe-content {
-  @apply min-h-0 gap-2 bg-background;
+  @apply min-h-0 gap-2 rounded-lg bg-background;
   transition: transform 180ms ease-out;
 }
 
@@ -234,7 +242,7 @@ html:has(.pani-modal[open]) {
 }
 
 .swipe-menu {
-  @apply absolute inset-y-0 right-0 flex items-center justify-end gap-1 pr-0.5 text-foreground;
+  @apply absolute inset-y-0 right-0 flex items-center justify-end gap-1 rounded-lg pr-0.5 text-foreground;
 }
 
 .swipe-menu button,
