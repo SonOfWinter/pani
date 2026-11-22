@@ -528,3 +528,67 @@ test('affiche les notifications au-dessus de la navigation sur un petit écran',
     }).toBe(true)
   }
 })
+
+test('garde le bandeau compact et les commandes visibles pendant le défilement', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('/')
+  await expect(page.getByRole('searchbox')).toBeVisible()
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('pani')
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const db = open.result
+      const transaction = db.transaction(['categories', 'items'], 'readwrite')
+      const now = new Date().toISOString()
+      for (let index = 0; index < 16; index++) {
+        const categoryId = crypto.randomUUID()
+        transaction.objectStore('categories').add({
+          id: categoryId, name: `Rayon ${index}`, normalizedName: `rayon ${index}`, position: index,
+          color: 'green', icon: 'basket', createdAt: now, updatedAt: now,
+        })
+        transaction.objectStore('items').add({
+          id: crypto.randomUUID(), name: `Article ${index}`, quantity: '1', position: 0, categoryId,
+          shopping: { quantity: '1', checkedAt: null }, createdAt: now, updatedAt: now,
+        })
+      }
+      transaction.oncomplete = () => { db.close(); resolve() }
+      transaction.onabort = () => { db.close(); reject(transaction.error) }
+    }
+  }))
+  await page.reload()
+
+  const header = page.getByRole('heading', { level: 1 }).locator('../..')
+  const search = page.getByRole('searchbox')
+  for (const mode of ['Liste', 'Courses', 'Catégories']) {
+    if (mode === 'Courses') await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.getByRole('button', { name: mode, exact: true }).click()
+    await expect(header.getByRole('heading', { name: mode, level: 1 })).toBeVisible()
+    const marker = mode === 'Liste' ? search
+      : mode === 'Courses' ? page.getByRole('checkbox', { name: 'Article 0' })
+        : page.getByRole('button', { name: 'Ajouter une catégorie' })
+    await expect(marker).toBeVisible()
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(header).toHaveCSS('height', '88px')
+    const initialY = (await marker.boundingBox())?.y
+    if (initialY === undefined) throw new Error('Contrôle introuvable.')
+    await page.evaluate(() => window.scrollTo(0, 140))
+    await expect(header).toHaveCSS('height', '56px')
+    await expect(header.getByRole('button', { name: 'Sauvegardes' })).toBeInViewport({ ratio: 1 })
+    await expect(header.getByRole('button', { name: 'Annuler la dernière action' })).toBeInViewport({ ratio: 1 })
+    if (mode === 'Courses') {
+      await expect(header.getByRole('button', { name: 'Vider les courses' })).toBeInViewport({ ratio: 1 })
+      await expect(header).toHaveCSS('transition-duration', '0s')
+    }
+    expect((await marker.boundingBox())?.y).toBeCloseTo(initialY - 140, 0)
+    if (mode === 'Liste') {
+      await search.evaluate((control) => control.focus({ preventScroll: true }))
+      await expect.poll(async () => {
+        const banner = await header.boundingBox()
+        const field = await search.boundingBox()
+        return Boolean(banner && field && field.y >= banner.y + banner.height)
+      }).toBe(true)
+    }
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(header).toHaveCSS('height', '88px')
+  }
+})

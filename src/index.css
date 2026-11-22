@@ -53,13 +53,14 @@
 }
 
 .pani-shell {
-  padding-block: max(2rem, env(safe-area-inset-top)) calc(6rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
   padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
 }
 
 .update-notice {
-  @apply sticky z-10 mb-4 rounded-lg border border-border bg-card p-3 text-sm;
-  top: max(0.5rem, env(safe-area-inset-top));
+  @apply pointer-events-auto mb-4 rounded-lg border border-border bg-card p-3 text-sm;
+  transform: translateY(calc(-1 * var(--header-collapse)));
+  transition: transform 160ms ease-out;
 }
 
 .pani-input {
@@ -151,12 +152,32 @@ html:has(.pani-modal[open]) {
   pointer-events: none;
 }
 
+/* Reserve the expanded height so collapsing the sticky header cannot move the list. */
+.screen-top {
+  --header-height: calc(env(safe-area-inset-top) + 5.5rem);
+  --header-collapse: 0rem;
+  @apply pointer-events-none sticky top-0 z-10 mb-4 grid;
+  grid-template-rows: var(--header-height) auto;
+}
+
+.screen-top[data-compact] {
+  --header-collapse: 2rem;
+}
+
 .screen-header {
-  @apply mb-5 flex items-start justify-between gap-4;
+  @apply pointer-events-auto flex items-center justify-between gap-2 self-start bg-background;
+  block-size: calc(var(--header-height) - var(--header-collapse));
+  padding-top: env(safe-area-inset-top);
+  transition: block-size 160ms ease-out;
 }
 
 .screen-header h1 {
-  @apply mb-1 text-3xl font-semibold tracking-tight;
+  @apply text-3xl font-semibold tracking-tight;
+  transition: font-size 160ms ease-out, line-height 160ms ease-out;
+}
+
+.screen-top[data-compact] h1 {
+  @apply text-xl;
 }
 
 .list-toolbar {
@@ -288,7 +309,10 @@ html:has(.pani-modal[open]) {
 
 @media (prefers-reduced-motion: reduce) {
   .swipe-content,
-  .bottom-nav-indicator {
+  .bottom-nav-indicator,
+  .screen-header,
+  .screen-header h1,
+  .update-notice {
     transition: none;
   }
 
