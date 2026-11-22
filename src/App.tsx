@@ -1,6 +1,6 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Cloud, Pencil, Plus, ShoppingBasket, Trash2, X } from 'lucide-react'
+import { Cloud, Pencil, Plus, ShoppingBasket, Trash2, Undo2, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useCloudBackup } from './backup/useCloudBackup'
@@ -18,9 +18,13 @@ import { database, type Item, type Mode } from './data/database'
 import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
 import { animateRemoval, animateSavedItem } from './lib/list-motion'
 import { moveItem } from './data/order'
+import { useUndoHistory } from './lib/useUndoHistory'
+import type { RecordUndo } from './data/undo'
 
 export function App() {
   const confirm = useConfirm()
+  const undo = useUndoHistory()
+  const recordListUndo: RecordUndo = (action) => undo.record('list', action)
   const result = useLiveQuery(async () => {
     try {
       return { list: await database.readList(), error: false as const }
@@ -37,6 +41,7 @@ export function App() {
   const items = result?.list?.items ?? []
   const categories = result?.list?.categories ?? []
   const mode = result?.list?.state.mode ?? 'list'
+  const undoUnavailable = !result?.list || !undo.history[mode].length || undo.busy
   const shoppingItems = items.flatMap((item) => item.shopping
     ? [{ ...item, quantity: item.shopping.quantity, checkedAt: item.shopping.checkedAt }]
     : [])
@@ -59,7 +64,7 @@ export function App() {
 
   async function addPurchase(item: Item) {
     await run(async () => {
-      const added = await addToShopping(item.id)
+      const added = await addToShopping(item.id, recordListUndo)
       if (added) toast.success(`${item.name} ajouté aux courses.`)
       else toast.info(`${item.name} est déjà dans les courses.`)
     }, 'Impossible d’ajouter cet article aux courses.')
@@ -86,7 +91,7 @@ export function App() {
     if (!await confirm({ title: `Supprimer « ${item.name} » ?`, action: 'Supprimer' })) return
     await run(async () => {
       await animateRemoval([document.getElementById(`reorder-row-${item.id}`)])
-      await deleteItem(item.id)
+      await deleteItem(item.id, recordListUndo)
       setOpenMenu(undefined)
       document.getElementById('add-item')?.focus()
     }, 'Impossible de supprimer cet article.', `${item.name} supprimé.`)
@@ -114,6 +119,10 @@ export function App() {
               )}
             </div>
             <div className="flex">
+              <Button variant="ghost" className="px-2 aria-disabled:opacity-50" aria-label="Annuler la dernière action"
+                aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undo.undo(mode) }}>
+                <Undo2 size={21} aria-hidden="true" />
+              </Button>
               {mode === 'shopping' && (
                 <Button variant="ghost" className="px-2" aria-label="Vider les courses" disabled={!shoppingItems.length} onClick={() => void emptyShopping()}>
                   <Trash2 size={21} />
@@ -126,8 +135,8 @@ export function App() {
           </header>
           {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
           {!result && <p role="status">Ouverture de la liste…</p>}
-          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} />}
-          {result?.list && mode === 'shopping' && <ShoppingView items={shoppingItems} categories={categories} />}
+          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} recordUndo={(action) => undo.record('categories', action)} />}
+          {result?.list && mode === 'shopping' && <ShoppingView items={shoppingItems} categories={categories} recordUndo={(action) => undo.record('shopping', action)} />}
           {result?.list && mode === 'list' && (
             <>
               <div className="list-toolbar">
@@ -234,6 +243,7 @@ export function App() {
         {editor && (
           <ItemEditor
             item={editor.item}
+            recordUndo={recordListUndo}
             categories={categories}
             onClose={() => setEditor(null)}
             onSave={(id) => {
@@ -244,7 +254,7 @@ export function App() {
             }}
           />
         )}
-        {backupOpen && <BackupPanel cloud={cloud} hasData={items.length + categories.length > 0} onClose={() => setBackupOpen(false)} />}
+        {backupOpen && <BackupPanel cloud={cloud} hasData={items.length + categories.length > 0} onRestored={undo.clear} onClose={() => setBackupOpen(false)} />}
       </main>
       <BottomNav mode={mode} disabled={!result?.list} onNavigate={(next) => void switchMode(next)} />
     </>

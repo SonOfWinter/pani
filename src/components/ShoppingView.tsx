@@ -2,10 +2,10 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import type { Category, Item } from '../data/database'
 import { toast } from 'sonner'
 import { animateRemoval } from '../lib/list-motion'
-import { Undo2 } from 'lucide-react'
 import { QuantityStepper } from './QuantityStepper'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
-import { changeQuantity, clearShopping, setItemChecked } from '../data/items'
+import { changeQuantity, clearShopping, setItemChecked, uncheckAll } from '../data/items'
+import type { RecordUndo } from '../data/undo'
 import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
@@ -35,10 +35,9 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
   )
 }
 
-export function ShoppingView({ items, categories }: { items: ShoppingItem[]; categories: Category[] }) {
+export function ShoppingView({ items, categories, recordUndo }: { items: ShoppingItem[]; categories: Category[]; recordUndo: RecordUndo }) {
   const confirm = useConfirm()
   const focusAfterChange = useRef<{ id: string; destination: string } | null>(null)
-  const [lastCheck, setLastCheck] = useState<{ id: string; name: string; checkedAt: string }>()
   const [error, setError] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const pending = items.filter((item) => item.checkedAt === null)
@@ -65,9 +64,7 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
       focusAfterChange.current = { id: item.id, destination }
     }
     try {
-      const checkedAt = await setItemChecked(item.id, item.checkedAt === null, item.checkedAt)
-      if (checkedAt && !item.checkedAt) setLastCheck({ id: item.id, name: item.name, checkedAt })
-      else setLastCheck((last) => last?.id === item.id ? undefined : last)
+      await setItemChecked(item.id, item.checkedAt === null, item.checkedAt, recordUndo)
       setError('')
       setAnnouncement(`${item.name} : achat ${item.checkedAt ? 'décoché' : 'coché'}.`)
     } catch {
@@ -90,7 +87,6 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
     try {
       await animateRemoval(checked.map((item) => document.getElementById(`shopping-row-${item.id}`)))
       await clearShopping(checked.map((item) => item.id))
-      setLastCheck(undefined)
       setError('')
       toast.success('Articles pris retirés.')
     } catch {
@@ -98,31 +94,21 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
     }
   }
 
-  const undoable = lastCheck && checked.some((item) => item.id === lastCheck.id && item.checkedAt === lastCheck.checkedAt)
-
-  async function undo() {
-    if (!lastCheck) return
+  async function resetChecks() {
     try {
-      const result = await setItemChecked(lastCheck.id, false, lastCheck.checkedAt)
-      if (result !== null) throw new Error('Cet article a changé.')
-      setLastCheck(undefined)
+      if (await uncheckAll(recordUndo)) {
+        setAnnouncement('Tous les articles sont de nouveau à acheter.')
+        requestAnimationFrame(() => document.getElementById(`purchase-${checked[0]?.id}`)?.focus())
+      }
       setError('')
-      toast.success(`${lastCheck.name} est de nouveau à acheter.`)
-      requestAnimationFrame(() => document.getElementById(`purchase-${lastCheck.id}`)?.focus())
     } catch {
-      setError('Impossible d’annuler cette coche.')
+      setError('Impossible de tout décocher.')
     }
   }
 
   return (
     <div>
       <p role="status" className="sr-only">{announcement}</p>
-      {undoable && (
-        <div className="undo-bar">
-          <p>{lastCheck.name} coché.</p>
-          <Button variant="ghost" onClick={() => void undo()}><Undo2 size={17} /> Annuler</Button>
-        </div>
-      )}
       {error && <p role="alert">{error}</p>}
       {pending.length === 0 && <p className="empty-group">
         {checked.length ? 'Courses terminées.' : 'Aucun article à acheter.'}
@@ -141,7 +127,10 @@ export function ShoppingView({ items, categories }: { items: ShoppingItem[]; cat
           <ul className="mb-3 divide-y divide-muted">
             {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
           </ul>
-          <Button variant="outline" onClick={() => void clearChecked()}>Retirer les articles pris</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void resetChecks()}>Tout décocher</Button>
+            <Button variant="outline" onClick={() => void clearChecked()}>Retirer les articles pris</Button>
+          </div>
         </details>
       )}
     </div>

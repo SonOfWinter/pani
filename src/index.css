@@ -273,10 +273,6 @@ html:has(.pani-modal[open]) {
   pointer-events: none;
 }
 
-.undo-bar {
-  @apply sticky top-2 z-10 mb-4 flex items-center justify-between gap-2 rounded-lg border border-border bg-muted px-3 text-sm;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .swipe-content,
   .bottom-nav-indicator {

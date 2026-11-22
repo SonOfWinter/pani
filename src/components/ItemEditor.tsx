@@ -1,12 +1,14 @@
 import { type FormEvent, useRef, useState } from 'react'
 import { saveItem } from '../data/items'
+import type { RecordUndo } from '../data/undo'
 import type { Category, Item } from '../data/database'
 import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { Button } from './ui/button'
 
-export function ItemEditor({ item, categories, onClose, onSave }: {
+export function ItemEditor({ item, categories, recordUndo, onClose, onSave }: {
   item: Item | null
   categories: Category[]
+  recordUndo: RecordUndo
   onClose: () => void
   onSave: (id: string) => void
 }) {
@@ -26,7 +28,7 @@ export function ItemEditor({ item, categories, onClose, onSave }: {
     }
     setSaving(true)
     try {
-      const id = await saveItem(name, quantity, categoryId || null, item?.id)
+      const id = await saveItem(name, quantity, categoryId || null, item?.id, recordUndo)
       sheet.current?.dismiss(() => onSave(id))
     } catch {
       setError('Impossible d’enregistrer cet article. Réessayez.')

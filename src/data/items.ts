@@ -1,11 +1,17 @@
-import { database } from './database'
+import { database, type Item } from './database'
+import { availableItemPosition, mutateWithUndo, undoMutation, type RecordUndo } from './undo'
 
-export async function saveItem(name: string, quantity: string, categoryId: string | null, id?: string) {
+function sameItemDetails(current: Item, expected: Item) {
+  return current.name === expected.name && current.quantity === expected.quantity &&
+    current.categoryId === expected.categoryId && current.position === expected.position
+}
+
+export async function saveItem(name: string, quantity: string, categoryId: string | null, id?: string, record?: RecordUndo) {
   const cleanName = name.trim()
   if (!cleanName) throw new Error('Saisissez un nom.')
   const updatedAt = new Date().toISOString()
 
-  return database.mutate(async () => {
+  return mutateWithUndo(async () => {
     const existing = id ? await database.items.get(id) : undefined
     if (id && !existing) throw new Error('Cet article a été supprimé.')
     if (categoryId && !await database.categories.get(categoryId)) {
@@ -17,28 +23,54 @@ export async function saveItem(name: string, quantity: string, categoryId: strin
     ).last()
     const position = sameCategory && existing ? existing.position : (last?.position ?? -1) + 1
     if (existing) {
-      await database.items.put({
-        ...existing, name: cleanName, quantity: quantity.trim(), categoryId, position, updatedAt,
-      })
-      return existing.id
+      const saved = { ...existing, name: cleanName, quantity: quantity.trim(), categoryId, position, updatedAt }
+      if (sameItemDetails(existing, saved)) return { value: existing.id }
+      await database.items.put(saved)
+      return { value: existing.id, undo: undoMutation(async () => {
+        const current = await database.items.get(saved.id)
+        if (!current || !sameItemDetails(current, saved)) return false
+        if (existing.categoryId && !await database.categories.get(existing.categoryId)) return false
+        await database.items.update(saved.id, {
+          name: existing.name,
+          quantity: existing.quantity,
+          categoryId: existing.categoryId,
+          position: await availableItemPosition(existing),
+          updatedAt: new Date().toISOString(),
+        })
+        return true
+      }) }
     }
 
-    const newId = crypto.randomUUID()
-    await database.items.add({
-      id: newId,
+    const item = {
+      id: crypto.randomUUID(),
       name: cleanName,
       quantity: quantity.trim(),
       categoryId,
       position,
       createdAt: updatedAt,
       updatedAt,
-    })
-    return newId
-  })
+    }
+    await database.items.add(item)
+    return { value: item.id, undo: undoMutation(async () => {
+      const current = await database.items.get(item.id)
+      if (!current || current.shopping || !sameItemDetails(current, item)) return false
+      await database.items.delete(item.id)
+      return true
+    }) }
+  }, record)
 }
 
-export async function deleteItem(id: string) {
-  await database.mutate(() => database.items.delete(id))
+export async function deleteItem(id: string, record?: RecordUndo) {
+  await mutateWithUndo(async () => {
+    const item = await database.items.get(id)
+    if (!item) return { value: undefined }
+    await database.items.delete(id)
+    return { value: undefined, undo: undoMutation(async () => {
+      if (await database.items.get(id) || (item.categoryId && !await database.categories.get(item.categoryId))) return false
+      await database.items.add({ ...item, position: await availableItemPosition(item) })
+      return true
+    }) }
+  }, record)
 }
 
 export function quantityParts(quantity: string) {
@@ -68,25 +100,65 @@ export async function changeQuantity(id: string, delta: -1 | 1, shopping = false
   })
 }
 
-export async function addToShopping(id: string) {
-  return database.mutate(async () => {
+export async function addToShopping(id: string, record?: RecordUndo) {
+  return mutateWithUndo(async () => {
     const item = await database.items.get(id)
     if (!item) throw new Error('Cet article a été supprimé.')
-    if (item.shopping) return false
+    if (item.shopping) return { value: false }
     await database.items.update(id, { shopping: { quantity: item.quantity, checkedAt: null } })
-    return true
-  }, Boolean)
+    return { value: true, undo: undoMutation(async () => {
+      const current = await database.items.get(id)
+      if (!current?.shopping) return false
+      await database.items.update(id, { shopping: undefined })
+      return true
+    }) }
+  }, record)
 }
 
-export async function setItemChecked(id: string, checked: boolean, expected: string | null) {
-  return database.mutate(async () => {
+interface CheckChange {
+  id: string
+  before: string | null
+  after: string | null
+}
+
+function undoChecks(changes: CheckChange[]) {
+  return undoMutation(async () => {
+    const items = await database.items.bulkGet(changes.map(({ id }) => id))
+    const restored: Item[] = []
+    for (const [index, change] of changes.entries()) {
+      const item = items[index]
+      if (!item?.shopping || item.shopping.checkedAt !== change.after) return false
+      restored.push({ ...item, shopping: { ...item.shopping, checkedAt: change.before } })
+    }
+    await database.items.bulkPut(restored)
+    return true
+  })
+}
+
+export async function setItemChecked(id: string, checked: boolean, expected: string | null, record?: RecordUndo) {
+  return mutateWithUndo(async () => {
     const item = await database.items.get(id)
     if (!item?.shopping) throw new Error('Cet article a été retiré des courses.')
-    if (item.shopping.checkedAt !== expected) return item.shopping.checkedAt
+    if (item.shopping.checkedAt !== expected || checked === (expected !== null)) return { value: item.shopping.checkedAt }
     const checkedAt = checked ? new Date().toISOString() : null
     await database.items.update(id, { shopping: { ...item.shopping, checkedAt } })
-    return checkedAt
-  })
+    return { value: checkedAt, undo: undoChecks([{ id, before: expected, after: checkedAt }]) }
+  }, record)
+}
+
+export async function uncheckAll(record?: RecordUndo) {
+  return mutateWithUndo(async () => {
+    const changes: CheckChange[] = []
+    const items = await database.items.filter((item) => Boolean(item.shopping?.checkedAt)).toArray()
+    const updates = items.flatMap((item) => {
+      if (!item.shopping?.checkedAt) return []
+      changes.push({ id: item.id, before: item.shopping.checkedAt, after: null })
+      return [{ ...item, shopping: { ...item.shopping, checkedAt: null } }]
+    })
+    if (!changes.length) return { value: false }
+    await database.items.bulkPut(updates)
+    return { value: true, undo: undoChecks(changes) }
+  }, record)
 }
 
 export async function clearShopping(checkedIds?: string[]) {
