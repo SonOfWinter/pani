@@ -1,3 +1,4 @@
+import { createServer } from 'node:http'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 async function waitForSheet(popup: Locator) {
@@ -36,6 +37,76 @@ async function waitForOfflineShell(page: Page) {
   if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) await page.reload()
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
 }
+
+test('applique une mise à jour PWA depuis un petit écran et retrouve sa liste hors ligne', async ({ page, context, baseURL }) => {
+  let version = 1
+  // Serve two versions of the production worker on an isolated origin.
+  const server = createServer(async (request, response) => {
+    try {
+      const url = new URL(baseURL ?? 'http://127.0.0.1:4173')
+      url.pathname = request.url ?? '/'
+      const upstream = await fetch(url)
+      const type = upstream.headers.get('content-type')
+      if (type) response.setHeader('content-type', type)
+      response.statusCode = upstream.status
+      if (url.pathname === '/sw.js') {
+        response.setHeader('cache-control', 'no-store')
+        response.end(`${await upstream.text()}\n// Test update ${version}\n`)
+      } else {
+        response.end(Buffer.from(await upstream.arrayBuffer()))
+      }
+    } catch {
+      response.writeHead(502).end()
+    }
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject).listen(0, '127.0.0.1', resolve)
+  })
+  try {
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Serveur de test indisponible.')
+    await page.setViewportSize({ width: 320, height: 568 })
+    await page.goto(`http://127.0.0.1:${address.port}/`)
+    await waitForOfflineShell(page)
+    for (const name of ['Riz', 'Pâtes', 'Carottes', 'Oranges', 'Pommes', 'Farine', 'Lentilles', 'Avoine']) {
+      await addItem(page, name)
+    }
+    await page.getByRole('button', { name: 'Actions pour Riz' }).press('Alt+ArrowRight')
+    await expect(page.getByRole('button', { name: 'Actions pour Riz' })).toHaveAccessibleDescription('Dans Courses')
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+
+    version = 2
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.update().then(() => undefined))
+    const notice = page.getByRole('complementary', { name: 'Mise à jour' })
+    const update = notice.getByRole('button', { name: 'Mettre à jour' })
+    await expect(update).toBeInViewport({ ratio: 1 })
+    const later = notice.getByRole('button', { name: 'Plus tard' })
+    await expect(later).toBeInViewport({ ratio: 1 })
+    await later.press('Enter')
+    await expect(notice).toBeHidden()
+    await page.reload()
+    await expect(update).toBeInViewport({ ratio: 1 })
+
+    for (const name of ['Catégories', 'Courses']) {
+      const tab = page.getByRole('button', { name, exact: true })
+      await tab.click()
+      await expect(tab).toHaveAttribute('aria-pressed', 'true')
+      await expect(update).toBeInViewport({ ratio: 1 })
+    }
+    await Promise.all([page.waitForEvent('load'), update.click()])
+    await expect(notice).toBeHidden()
+    await expect(page.getByRole('checkbox', { name: 'Riz' })).toBeVisible()
+
+    await context.setOffline(true)
+    await page.reload()
+    await expect(page.getByRole('checkbox', { name: 'Riz' })).toBeVisible()
+    await page.getByRole('button', { name: 'Liste', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Actions pour Avoine' })).toBeVisible()
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})
 
 test('ajoute un article aux courses au clavier et le retrouve après une relance hors ligne', async ({ page, context }) => {
   await page.goto('/')
