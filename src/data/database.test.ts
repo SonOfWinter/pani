@@ -2,7 +2,9 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, expect, test } from 'vitest'
 import Dexie, { liveQuery } from 'dexie'
 import { database, PaniDatabase, type Item } from './database'
-import { addToShopping, changeQuantity, saveItem, setItemChecked } from './items'
+import { addToShopping, changeQuantity, deleteItem, saveItem, setItemChecked, uncheckAll } from './items'
+import { deleteCategory, saveCategory } from './categories'
+import type { UndoAction } from './undo'
 
 let db: PaniDatabase
 const item: Item = {
@@ -87,4 +89,49 @@ test('la migration conserve les achats préexistants et leur coche', async () =>
 
   const { items } = await db.readList()
   expect(items).toEqual([{ ...item, shopping: { quantity: item.quantity, checkedAt: item.updatedAt } }])
+})
+
+test('annule les modifications et suppressions en conservant les données des autres vues', async () => {
+  const history: UndoAction[] = []
+  const record = (undo: UndoAction) => history.push(undo)
+  const undo = async () => {
+    const action = history.pop()
+    expect(action).toBeDefined()
+    await expect(action?.()).resolves.toBe(true)
+  }
+  try {
+    await database.open()
+    await saveCategory('Épicerie', '#123456', '', undefined, record)
+    const category = await database.categories.toCollection().first()
+    if (!category) throw new Error('Catégorie absente.')
+    const id = await saveItem('Farine', '1 kg', category.id, undefined, record)
+    await saveItem('Farine complète', '2 kg', null, id, record)
+    await deleteItem(id, record)
+    await undo()
+    expect(await database.items.get(id)).toMatchObject({ name: 'Farine complète', categoryId: null })
+    await undo()
+    expect(await database.items.get(id)).toMatchObject({ name: 'Farine', quantity: '1 kg', categoryId: category.id })
+
+    await saveCategory('Produits secs', '#224466', '', category.id, record)
+    await deleteCategory(category.id, record)
+    await addToShopping(id)
+    await undo()
+    expect(await database.items.get(id)).toMatchObject({ categoryId: category.id, shopping: { quantity: '1 kg' } })
+    await undo()
+    expect(await database.categories.get(category.id)).toMatchObject({ name: 'Épicerie', customColor: '#123456' })
+
+    const other = await saveItem('Riz', '2 kg', null)
+    await addToShopping(other)
+    const firstCheck = await setItemChecked(id, true, null, record)
+    const secondCheck = await setItemChecked(other, true, null, record)
+    await setItemChecked(id, false, firstCheck, record)
+    await undo()
+    await uncheckAll(record)
+    await changeQuantity(other, 1, true)
+    await undo()
+    expect(await database.items.get(id)).toMatchObject({ shopping: { checkedAt: firstCheck } })
+    expect(await database.items.get(other)).toMatchObject({ shopping: { checkedAt: secondCheck, quantity: '3 kg' } })
+  } finally {
+    await database.delete()
+  }
 })

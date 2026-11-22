@@ -13,7 +13,7 @@ Quand une version est prête, un bandeau apparaît en haut du contenu et reste v
 | Écran | Parcours |
 | --- | --- |
 | Liste | Titre de la vue, compteur d’articles à acheter, champ de recherche par nom dans la vue Liste et sections par catégorie, y compris les catégories vides. Glisser un article vers la droite l’ajoute aux Courses ou indique qu’il y est déjà. Les articles présents dans Courses affichent le panier blanc de l’icône Pani dans une pastille ronde de couleur primaire, avec la description accessible « Dans Courses ». Le panier est identique pour les articles à acheter et les articles déjà cochés. Chaque ligne se termine par les boutons « − » et « + » autour de la quantité. Le bouton « Ajouter un article » ouvre un panneau bas avec nom, quantité facultative et catégorie. La validation ramène le focus au déclencheur ou au nouvel article. |
-| Courses | Afficher les articles à acheter par rayon. Un toucher coche l’article et actualise le compteur. Le bouton « Annuler » remet le dernier article coché parmi les achats à faire. Les boutons de quantité restent disponibles. Les articles pris restent dans une section repliable avec possibilité de décocher. « Retirer les articles pris » demande confirmation et conserve les achats restants. La poubelle vide entièrement Courses après confirmation. Les articles restent dans Liste. |
+| Courses | Afficher les articles à acheter par rayon. Un toucher coche l’article et actualise le compteur. La flèche d’annulation du bandeau permet de revenir sur une coche ou une décoche. « Tout décocher » remet tous les articles pris parmi les achats à faire et compte comme une seule action annulable. Les boutons de quantité restent disponibles. Les articles pris restent dans une section repliable avec possibilité de décocher. « Retirer les articles pris » demande confirmation et conserve les achats restants. La poubelle vide entièrement Courses après confirmation. Les articles restent dans Liste. |
 | Catégories | Ouvrir un panneau du bas pour ajouter ou modifier une catégorie. Saisir son nom, choisir sa couleur avec le sélecteur et saisir un emoji au clavier. Réordonner les catégories depuis leur poignée. Pour supprimer, annoncer que les articles iront dans « Sans catégorie ». Présenter un aperçu de l’ordre des rayons. |
 | Sauvegarde | Montrer le dernier succès et l’état courant. Expliquer la différence entre compte et phrase de récupération. Pour restaurer, afficher un aperçu après déchiffrement, puis demander de confirmer le remplacement local. |
 
@@ -24,3 +24,13 @@ Quand une version est prête, un bandeau apparaît en haut du contenu et reste v
 - Cibles tactiles d’au moins 44 × 44 pixels CSS, libellés VoiceOver, focus visible, contraste WCAG AA, zoom, zones sûres iOS et mouvements réduits. Après déplacement ou coche, annoncer le résultat aux technologies d’assistance et maintenir un focus logique.
 
 - Les panneaux d’article, de catégorie et de sauvegarde montent depuis le bas et verrouillent le défilement de la page. Un toucher en dehors ou Échap les ferme. Les suppressions et retraits ouvrent une confirmation qui utilise les composants de Pani. Les notifications temporaires confirment les créations, modifications et suppressions, ou indiquent un ajout aux Courses déjà effectué. Le témoin de navigation suit la vue sélectionnée. Les transitions respectent le réglage de mouvements réduits.
+
+## Annulation
+
+La flèche « Annuler la dernière action » figure dans le bandeau de chaque vue. Elle est estompée et annoncée comme indisponible quand l’historique est vide. Chaque vue garde ses cinq dernières actions annulables pendant la session.
+
+- Liste permet d’annuler la création, la modification ou la suppression d’un article, ainsi que son ajout à Courses. Annuler l’ajout retire l’achat même si sa quantité ou sa coche a changé depuis.
+- Courses permet d’annuler une coche, une décoche ou « Tout décocher ».
+- Catégories permet d’annuler la création, la modification ou la suppression d’une catégorie. Annuler la suppression rétablit aussi le rayon de ses articles.
+
+Une action incompatible avec les données actuelles est écartée avec un message. Une erreur d’écriture laisse l’action disponible pour réessayer. La relance de Pani ou le remplacement des données par une sauvegarde efface les trois historiques.

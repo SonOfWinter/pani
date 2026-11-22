@@ -20,7 +20,7 @@ function download(text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
-export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; hasData: boolean; onClose: () => void }) {
+export function BackupPanel({ cloud, hasData, onRestored, onClose }: { cloud: CloudBackup; hasData: boolean; onRestored: () => void; onClose: () => void }) {
   const sheet = useRef<BottomSheetHandle>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const chooseFile = useRef<HTMLButtonElement>(null)
@@ -110,6 +110,7 @@ export function BackupPanel({ cloud, hasData, onClose }: { cloud: CloudBackup; h
               <Button variant="ghost" disabled={busy} onClick={() => setPreview(undefined)}>Annuler</Button>
               <Button variant="destructive" disabled={busy} onClick={() => void run('restore', async () => {
                 await restoreSnapshot(visiblePreview.data, visiblePreview.revision)
+                onRestored()
                 setPreview(undefined)
                 setMessage('Sauvegarde restaurée.')
               })}>{operation === 'restore' ? 'Restauration…' : 'Confirmer le remplacement'}</Button>

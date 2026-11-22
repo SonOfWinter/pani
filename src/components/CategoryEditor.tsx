@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { categoryColor, deleteCategory, icons, saveCategory } from '../data/categories'
 import type { Category } from '../data/database'
 import { moveCategory } from '../data/order'
+import type { RecordUndo } from '../data/undo'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { Reorder, SortableRow } from './Reorder'
 import { toast } from 'sonner'
@@ -11,7 +12,7 @@ import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
-function CategoryForm({ category, onClose }: { category: Category | null; onClose: () => void }) {
+function CategoryForm({ category, recordUndo, onClose }: { category: Category | null; recordUndo: RecordUndo; onClose: () => void }) {
   const confirm = useConfirm()
   const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(category?.name ?? '')
@@ -39,7 +40,7 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!busy) void run(() => saveCategory(name, color, emoji, category?.id), category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.')
+    if (!busy) void run(() => saveCategory(name, color, emoji, category?.id, recordUndo), category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.')
   }
 
   async function remove(current: Category) {
@@ -48,7 +49,7 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
       description: 'Ses articles iront dans « Sans catégorie ».',
       action: 'Supprimer la catégorie',
     })) {
-      await run(() => deleteCategory(current.id), 'Catégorie supprimée.')
+      await run(() => deleteCategory(current.id, recordUndo), 'Catégorie supprimée.')
     }
   }
 
@@ -85,7 +86,7 @@ function CategoryForm({ category, onClose }: { category: Category | null; onClos
   )
 }
 
-export function CategoryEditor({ categories }: { categories: Category[] }) {
+export function CategoryEditor({ categories, recordUndo }: { categories: Category[]; recordUndo: RecordUndo }) {
   const [editor, setEditor] = useState<{ category: Category | null }>()
   const [error, setError] = useState('')
   const [moving, setMoving] = useState(false)
@@ -133,7 +134,7 @@ export function CategoryEditor({ categories }: { categories: Category[] }) {
           </ul>
         </SortableContext>
       </Reorder>
-      {editor && <CategoryForm category={editor.category} onClose={() => setEditor(undefined)} />}
+      {editor && <CategoryForm category={editor.category} recordUndo={recordUndo} onClose={() => setEditor(undefined)} />}
     </section>
   )
 }

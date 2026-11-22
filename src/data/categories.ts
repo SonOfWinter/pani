@@ -1,4 +1,5 @@
 import { database, type Category, type CategoryColor, type CategoryIcon } from './database'
+import { availableCategoryPosition, mutateWithUndo, undoMutation, type RecordUndo } from './undo'
 
 const legacyColors: Record<CategoryColor, string> = {
   green: '#7d9b92',
@@ -21,7 +22,7 @@ export const icons: Record<CategoryIcon, { label: string; symbol: string }> = {
   package: { label: 'Boîte', symbol: '📦' },
 }
 
-export async function saveCategory(name: string, customColor: string, emoji: string, id?: string) {
+export async function saveCategory(name: string, customColor: string, emoji: string, id?: string, record?: RecordUndo) {
   const cleanName = name.trim()
   if (!cleanName) throw new Error('Saisissez un nom de catégorie.')
   if (!colorPattern.test(customColor)) throw new Error('Sélectionnez une couleur valide.')
@@ -30,19 +31,32 @@ export async function saveCategory(name: string, customColor: string, emoji: str
   const normalizedName = cleanName.toLocaleLowerCase('fr')
   const updatedAt = new Date().toISOString()
 
-  return database.mutate(async () => {
+  return mutateWithUndo(async () => {
     const duplicate = await database.categories.where('normalizedName').equals(normalizedName).first()
     if (duplicate && duplicate.id !== id) throw new Error('Cette catégorie existe déjà.')
 
     if (id) {
       const existing = await database.categories.get(id)
       if (!existing) throw new Error('Cette catégorie a été supprimée.')
-      await database.categories.put({ ...existing, name: cleanName, normalizedName, customColor, emoji: symbol || undefined, updatedAt })
-      return
+      const saved = { ...existing, name: cleanName, normalizedName, customColor, emoji: symbol || undefined, updatedAt }
+      if (sameCategoryDetails(existing, saved)) return { value: undefined }
+      await database.categories.put(saved)
+      return { value: undefined, undo: undoMutation(async () => {
+        const current = await database.categories.get(id)
+        if (!current || !sameCategoryDetails(current, saved) || await nameTaken(existing)) return false
+        await database.categories.update(id, {
+          name: existing.name,
+          normalizedName: existing.normalizedName,
+          customColor: existing.customColor,
+          emoji: existing.emoji,
+          updatedAt: new Date().toISOString(),
+        })
+        return true
+      }) }
     }
 
     const last = await database.categories.orderBy('position').last()
-    await database.categories.add({
+    const category: Category = {
       id: crypto.randomUUID(),
       name: cleanName,
       normalizedName,
@@ -53,17 +67,36 @@ export async function saveCategory(name: string, customColor: string, emoji: str
       position: (last?.position ?? -1) + 1,
       createdAt: updatedAt,
       updatedAt,
-    })
-  })
+    }
+    await database.categories.add(category)
+    return { value: undefined, undo: undoMutation(async () => {
+      const current = await database.categories.get(category.id)
+      if (!current || !sameCategoryDetails(current, category)) return false
+      if (await database.items.filter((item) => item.categoryId === category.id).first()) return false
+      await database.categories.delete(category.id)
+      return true
+    }) }
+  }, record)
 }
 
-export async function deleteCategory(id: string) {
-  await database.mutate(async () => {
-    if (!await database.categories.get(id)) throw new Error('Cette catégorie a déjà été supprimée.')
+function sameCategoryDetails(current: Category, expected: Category) {
+  return current.name === expected.name && current.customColor === expected.customColor && current.emoji === expected.emoji
+}
+
+async function nameTaken(category: Category) {
+  const existing = await database.categories.where('normalizedName').equals(category.normalizedName).first()
+  return existing !== undefined && existing.id !== category.id
+}
+
+export async function deleteCategory(id: string, record?: RecordUndo) {
+  await mutateWithUndo(async () => {
+    const category = await database.categories.get(id)
+    if (!category) throw new Error('Cette catégorie a déjà été supprimée.')
     const items = await database.items.orderBy('position').toArray()
     const last = items.filter((item) => item.categoryId === null).at(-1)
     const updatedAt = new Date().toISOString()
-    const moved = items.filter((item) => item.categoryId === id).map((item, index) => ({
+    const previous = items.filter((item) => item.categoryId === id)
+    const moved = previous.map((item, index) => ({
       ...item,
       categoryId: null,
       position: (last?.position ?? -1) + 1 + index,
@@ -71,5 +104,18 @@ export async function deleteCategory(id: string) {
     }))
     await database.items.bulkPut(moved)
     await database.categories.delete(id)
-  })
+    return { value: undefined, undo: undoMutation(async () => {
+      if (await database.categories.get(id) || await nameTaken(category)) return false
+      const current = await database.items.bulkGet(previous.map((item) => item.id))
+      const restored = []
+      for (const [index, original] of previous.entries()) {
+        const item = current[index]
+        if (!item || item.categoryId !== null || item.position !== moved[index].position) return false
+        restored.push({ ...item, categoryId: id, position: original.position, updatedAt: new Date().toISOString() })
+      }
+      await database.categories.add({ ...category, position: await availableCategoryPosition(category) })
+      await database.items.bulkPut(restored)
+      return true
+    }) }
+  }, record)
 }
