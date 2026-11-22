@@ -13,6 +13,8 @@ npm test
 npm run build
 ```
 
+`npm ci` installe les hooks Husky du dépôt. Le commit vérifie le lint des fichiers de code indexés. Le push vérifie les types et les tests Vitest. Voir les [conventions](docs/conventions.md) pour les cas d’indexation partielle et de configuration Git.
+
 Ces vérifications sont aussi configurées dans GitHub Actions. Pour la recette navigateur, lancer `npx playwright install chromium webkit`, puis `npm run build` et `npm run test:e2e`. Pour activer le cloud et tester l’isolation des comptes, voir [la configuration Supabase](supabase/README.md).
 
 ## Documentation

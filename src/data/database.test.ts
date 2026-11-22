@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, expect, test } from 'vitest'
 import Dexie, { liveQuery } from 'dexie'
-import { PaniDatabase, type Item } from './database'
+import { database, PaniDatabase, type Item } from './database'
+import { addToShopping, changeQuantity, saveItem, setItemChecked } from './items'
 
 let db: PaniDatabase
 const item: Item = {
@@ -27,6 +28,26 @@ test('conserve les articles et la révision après réouverture', async () => {
   db.close()
   await db.open()
   expect(await db.readList()).toMatchObject({ items: [item], state: { revision: 1 } })
+})
+
+test('conserve la quantité de Courses et la coche indépendamment de Liste après réouverture', async () => {
+  try {
+    const id = await saveItem('Farine', '500 g', null)
+    await addToShopping(id)
+    await changeQuantity(id, 1, true)
+    await changeQuantity(id, -1)
+    const checkedAt = await setItemChecked(id, true, null)
+    expect(checkedAt).toEqual(expect.any(String))
+
+    database.close()
+    await database.open()
+    expect(await database.items.get(id)).toMatchObject({
+      quantity: '499 g',
+      shopping: { quantity: '501 g', checkedAt },
+    })
+  } finally {
+    await database.delete()
+  }
 })
 
 test('annule les écritures partielles et conserve la révision', async () => {

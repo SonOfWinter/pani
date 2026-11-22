@@ -3,3 +3,4 @@
 - [ADR-001 — PWA et données locales](0001-pwa-local-first.md)
 - [ADR-002 — Composants et interactions](0002-interface-soft-native.md)
 - [ADR-003 — Instantanés chiffrés](0003-sauvegarde-chiffree.md)
+- [ADR-004 — Contrôles qualité au commit, au push et en CI](0004-controles-qualite.md)
