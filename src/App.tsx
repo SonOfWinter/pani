@@ -185,8 +185,9 @@ export function App() {
                             <button
                               type="button"
                               data-swipe-trigger
-                              className="min-h-11 min-w-0 flex-1 break-words text-left"
+                              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
                               aria-label={`Actions pour ${item.name}`}
+                              aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
                               aria-expanded={openMenu === item.id}
                               aria-controls={`actions-${item.id}`}
                               aria-keyshortcuts="Alt+ArrowRight"
@@ -206,7 +207,16 @@ export function App() {
                                 }
                               }}
                             >
-                              {item.name}
+                              <span className="min-w-0 break-words">{item.name}</span>
+                              {item.shopping && (
+                                <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                                  <span className="sr-only">Dans Courses</span>
+                                  <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
+                                  </svg>
+                                </span>
+                              )}
                             </button>
                             <QuantityStepper item={item} onChange={(delta) => void run(
                               () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
