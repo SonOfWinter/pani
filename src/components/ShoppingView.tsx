@@ -3,13 +3,22 @@ import type { Category, Item } from '../data/database'
 import { toast } from 'sonner'
 import { animateRemoval } from '../lib/list-motion'
 import { QuantityStepper } from './QuantityStepper'
-import { categoryBackground, CategoryLabel } from './CategoryLabel'
+import { CategoryDisclosure } from './CategoryDisclosure'
 import { changeQuantity, clearShopping, setItemChecked, uncheckAll } from '../data/items'
 import type { RecordUndo } from '../data/undo'
 import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
 type ShoppingItem = Item & { checkedAt: string | null }
+
+function focusShoppingControl(id: string) {
+  const control = document.getElementById(id)
+  if (control?.closest('[inert]')) {
+    control.closest('section')?.querySelector<HTMLButtonElement>('.category-heading-toggle button')?.focus()
+  } else {
+    control?.focus()
+  }
+}
 
 function ShoppingRow({ item, onToggle, onQuantity }: {
   item: ShoppingItem
@@ -38,6 +47,7 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
 export function ShoppingView({ items, categories, recordUndo }: { items: ShoppingItem[]; categories: Category[]; recordUndo: RecordUndo }) {
   const confirm = useConfirm()
   const focusAfterChange = useRef<{ id: string; destination: string } | null>(null)
+  const [collapsedCategories, setCollapsedCategories] = useState(new Set<string | null>())
   const [error, setError] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const pending = items.filter((item) => item.checkedAt === null)
@@ -52,11 +62,12 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
     if (!target || !items.some((item) => item.id === target.id && Boolean(item.checkedAt) !==
       (target.destination === `purchase-${target.id}`))) return
     focusAfterChange.current = null
-    document.getElementById(target.destination)?.focus()
+    focusShoppingControl(target.destination)
   }, [items])
 
   async function toggle(item: ShoppingItem) {
-    const next = pending[pending.findIndex((entry) => entry.id === item.id) + 1]
+    const visible = pending.filter((entry) => !collapsedCategories.has(entry.categoryId))
+    const next = visible[visible.findIndex((entry) => entry.id === item.id) + 1]
     if (document.activeElement?.id === `purchase-${item.id}`) {
       const destination = item.checkedAt
         ? `purchase-${item.id}`
@@ -98,7 +109,7 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
     try {
       if (await uncheckAll(recordUndo)) {
         setAnnouncement('Tous les articles sont de nouveau à acheter.')
-        requestAnimationFrame(() => document.getElementById(`purchase-${checked[0]?.id}`)?.focus())
+        requestAnimationFrame(() => focusShoppingControl(`purchase-${checked[0]?.id}`))
       }
       setError('')
     } catch {
@@ -113,14 +124,23 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
       {pending.length === 0 && <p className="empty-group">
         {checked.length ? 'Courses terminées.' : 'Aucun article à acheter.'}
       </p>}
-      {groups.map(({ category, items }) => (
-        <section key={category?.id ?? 'none'} className="list-group">
-          <h2 className="category-heading" style={categoryBackground(category)}><CategoryLabel category={category} /></h2>
-          <ul className="divide-y divide-border">
-            {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
-          </ul>
-        </section>
-      ))}
+      {groups.map(({ category, items }) => {
+        const categoryId = category?.id ?? null
+        return (
+          <section key={categoryId ?? 'none'} className="list-group">
+            <CategoryDisclosure category={category} count={items.length} expanded={!collapsedCategories.has(categoryId)}
+              onToggle={() => setCollapsedCategories((current) => {
+                const next = new Set(current)
+                if (!next.delete(categoryId)) next.add(categoryId)
+                return next
+              })}>
+              <ul className="divide-y divide-border">
+                {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
+              </ul>
+            </CategoryDisclosure>
+          </section>
+        )
+      })}
       {checked.length > 0 && (
         <details className="mt-6 px-3">
           <summary id="checked-items" className="min-h-11 cursor-pointer py-2 font-semibold">Articles pris ({checked.length})</summary>
