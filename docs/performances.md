@@ -25,3 +25,12 @@ Chaque cellule indique la médiane et le 95e percentile, en millisecondes. Le re
 | WebKit | 1 000 | Liste → Courses | 0 / 1 | 78 / 101 | 91 / 113 | 163,5 / 199 |
 
 À 1 000 articles, le 95e percentile du regroupement est au plus de 1 ms dans les deux moteurs. Au 95e percentile sur WebKit, le passage à Courses atteint 113 ms jusqu’à la mise à jour du DOM. La phase React atteint 101 ms au même percentile. Les deux percentiles sont calculés sur des séries distinctes. Pour poursuivre l’analyse, profiler le rendu et le montage des lignes de Courses, puis reproduire le scénario sur iPhone physique.
+
+## PANI-36 — Retour visuel au dépôt
+
+Le 22 novembre 2026, sur les builds de production avant et après correction, Playwright a déplacé la première de trois lignes fictives à la dernière position dans Liste et Catégories. La fenêtre était de 390 × 844. Une transaction IndexedDB de test maintenue ouverte retardait la persistance. Le test contrôle l’ordre du DOM et échantillonne la position de la ligne avec `requestAnimationFrame` dès le relâchement du pointeur.
+
+- Avant correction, Chromium et WebKit affichaient encore l’ordre initial pendant la fenêtre de contrôle d’une seconde, dans les deux vues.
+- Après correction, les deux moteurs affichent l’ordre demandé pendant le verrou. Sur les huit premières images échantillonnées, la ligne déplacée ne repasse pas par sa position d’origine. Après libération du verrou et confirmation, le nouvel ordre est retrouvé à la relance.
+
+Ce protocole reproduit le retour à l’ancien ordre au dépôt. La cadence pendant le geste, le défilement près des bords et le lien avec le signalement sur iPhone 18 Pro restent à vérifier sur appareil.

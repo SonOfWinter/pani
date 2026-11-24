@@ -18,3 +18,14 @@ export function animateSavedItem(id: string) {
     )
   })
 }
+
+export function animateDrop(element: HTMLElement, offset: number, fade = false) {
+  if (reducedMotion() || (!fade && Math.abs(offset) < 1)) return
+  return element.animate(
+    [
+      { transform: `translateY(${offset}px)`, opacity: 1 },
+      { transform: 'translateY(0)', opacity: fade ? 0 : 1 },
+    ],
+    { duration: 220, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' },
+  )
+}

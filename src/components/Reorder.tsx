@@ -1,22 +1,101 @@
 import {
-  AutoScrollActivator, closestCenter, DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
-  useDroppable, useSensor, useSensors, type DragEndEvent, type Modifier,
+  AutoScrollActivator, closestCenter, DndContext, DragOverlay, getClientRect, KeyboardSensor, PointerSensor, pointerWithin,
+  useDndContext, useDroppable, useSensor, useSensors, type DragEndEvent, type Modifier,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, ShoppingBasket } from 'lucide-react'
-import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
+import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
+import { animateDrop } from '../lib/list-motion'
 
 const verticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 const verticalModifiers = [verticalAxis]
+const ItemDragLayout = createContext<{
+  insertionIndex: number
+  removedId?: string
+  height: number
+} | null>(null)
 
-export function Reorder({ children, onDrop, showPreview = true, verticalOnly = false }: {
+export function ItemSortGroup({ id, itemIds, expanded, committing, children }: {
+  id: string
+  itemIds: string[]
+  expanded: boolean
+  committing: boolean
+  children: ReactNode
+}) {
+  const { active, activeNodeRect, over, measureDroppableContainers } = useDndContext()
+  const target = over?.data.current?.sortable
+  const sourceId = active?.data.current?.sortable?.containerId
+  const targetId = target?.containerId ?? over?.id
+  const height = activeNodeRect?.height ?? 0
+  const betweenGroups = expanded && !committing && height > 0 && sourceId && targetId &&
+    sourceId !== targetId && over?.data.current?.expanded !== false
+  const insertionIndex = betweenGroups && targetId === id ? target?.index ?? itemIds.length : -1
+  const removedId = betweenGroups && sourceId === id ? String(active.id) : undefined
+  const removedBefore = useRef(false)
+
+  useLayoutEffect(() => {
+    const removed = Boolean(removedId)
+    if (removedBefore.current === removed) return
+    removedBefore.current = removed
+    measureDroppableContainers([])
+  }, [removedId, measureDroppableContainers])
+
+  return (
+    <SortableContext id={id} items={itemIds} strategy={verticalListSortingStrategy}>
+      <ItemDragLayout.Provider value={insertionIndex >= 0 || removedId ? { insertionIndex, removedId, height } : null}>
+        <ul className="list-sortable-items divide-y divide-border" data-committing={committing} data-dragging={Boolean(active)}
+          style={{ paddingBottom: insertionIndex >= 0 ? height : undefined }}>
+          {children}
+        </ul>
+      </ItemDragLayout.Provider>
+    </SortableContext>
+  )
+}
+
+export function Reorder({ children, onDrop, onStart, showPreview = true, hasCategoryTargets = false }: {
   children: ReactNode
   onDrop: (event: DragEndEvent) => void
+  onStart?: () => void
   showPreview?: boolean
-  verticalOnly?: boolean
+  hasCategoryTargets?: boolean
 }) {
   const [label, setLabel] = useState<string>()
+  const preview = useRef<HTMLDivElement>(null)
+  const settling = useRef<Animation | undefined>(undefined)
+  const [drop, setDrop] = useState<{
+    rowId: string
+    from: DOMRect
+    folded?: { target: HTMLElement; ghost: HTMLElement }
+  }>()
+
+  useLayoutEffect(() => {
+    if (!drop) return
+    const row = document.getElementById(drop.rowId)
+    if (!row) return
+    if (!drop.folded) {
+      const animation = animateDrop(row, drop.from.top - getClientRect(row, { ignoreTransform: true }).top)
+      settling.current = animation
+      return () => animation?.cancel()
+    }
+
+    const { target, ghost } = drop.folded
+    const top = target.getBoundingClientRect().top
+    Object.assign(ghost.style, {
+      position: 'fixed', zIndex: '999', top: `${top}px`, left: `${drop.from.left}px`, width: `${drop.from.width}px`,
+    })
+    ghost.setAttribute('aria-hidden', 'true')
+    document.body.append(ghost)
+    const animation = animateDrop(ghost, drop.from.top - top, true)
+    settling.current = animation
+    if (animation) void animation.finished.then(() => ghost.remove(), () => ghost.remove())
+    else ghost.remove()
+    return () => {
+      animation?.cancel()
+      ghost.remove()
+    }
+  }, [drop])
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -24,11 +103,17 @@ export function Reorder({ children, onDrop, showPreview = true, verticalOnly = f
   return (
     <DndContext
       sensors={sensors}
-      modifiers={verticalOnly ? verticalModifiers : undefined}
-      autoScroll={verticalOnly ? { activator: AutoScrollActivator.DraggableRect } : true}
+      modifiers={verticalModifiers}
+      autoScroll={hasCategoryTargets ? true : { activator: AutoScrollActivator.DraggableRect }}
       collisionDetection={(args) => {
-        if (verticalOnly || !args.pointerCoordinates) return closestCenter(args)
-        const collisions = pointerWithin(args)
+        if (!hasCategoryTargets || !args.pointerCoordinates) return closestCenter(args)
+        const collisions = pointerWithin({
+          ...args,
+          pointerCoordinates: {
+            x: args.collisionRect.left + args.collisionRect.width / 2,
+            y: args.pointerCoordinates.y,
+          },
+        })
         const rows = collisions.filter(({ id }) => id !== args.active.id && !String(id).startsWith('category:'))
         if (rows.length) return rows
         if (collisions.some(({ id }) => id === args.active.id)) return []
@@ -45,9 +130,23 @@ export function Reorder({ children, onDrop, showPreview = true, verticalOnly = f
           onDragCancel: () => 'Déplacement annulé.',
         },
       }}
-      onDragStart={({ active }) => setLabel(active.data.current?.label as string | undefined)}
+      onDragStart={({ active }) => {
+        settling.current?.cancel()
+        setLabel(active.data.current?.label as string | undefined)
+        onStart?.()
+      }}
       onDragCancel={() => setLabel(undefined)}
       onDragEnd={(event) => {
+        const rowId = `reorder-row-${event.active.id}`
+        const overlay = preview.current
+        const from = (overlay ?? document.getElementById(rowId))?.getBoundingClientRect()
+        if (from && event.over && event.over.id !== event.active.id) {
+          const target = hasCategoryTargets && overlay
+            ? document.getElementById(String(event.over.id))?.querySelector<HTMLElement>('h2 button[aria-expanded="false"]')
+            : undefined
+          const ghost = target && overlay?.cloneNode(true)
+          setDrop({ rowId, from, folded: target && ghost instanceof HTMLElement ? { target, ghost } : undefined })
+        }
         setLabel(undefined)
         onDrop(event)
       }}
@@ -55,18 +154,19 @@ export function Reorder({ children, onDrop, showPreview = true, verticalOnly = f
       {children}
       {showPreview && (
         <DragOverlay dropAnimation={null}>
-          {label && <div className="drag-preview"><GripVertical size={18} />{label}</div>}
+          {label && <div ref={preview} className="drag-preview"><GripVertical size={18} />{label}</div>}
         </DragOverlay>
       )}
     </DndContext>
   )
 }
 
-export function SortableRow({ id, label, disabled = false, dropDisabled = false, menu, menuOpen = false, onMenuChange, onSwipeRight, appearance, children }: {
+export function SortableRow({ id, label, disabled = false, dropDisabled = false, dragPending = false, menu, menuOpen = false, onMenuChange, onSwipeRight, appearance, children }: {
   id: string
   label: string
   disabled?: boolean
   dropDisabled?: boolean
+  dragPending?: boolean
   menu?: ReactNode
   menuOpen?: boolean
   onMenuChange?: (open: boolean) => void
@@ -74,11 +174,12 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
   appearance?: CSSProperties
   children: ReactNode
 }) {
+  const layout = useContext(ItemDragLayout)
   const suppressClick = useRef(false)
   const gesture = useRef<{ id: number; x: number; y: number; locked: boolean } | null>(null)
   const [slide, setSlide] = useState<number>()
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({ id, disabled: { draggable: disabled, droppable: dropDisabled }, data: { label } })
+  const { attributes, index, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } =
+    useSortable({ id, disabled: { draggable: disabled || dragPending, droppable: dropDisabled }, data: { label } })
   const menuWidth = 192
   const basketWidth = 44
   const coloredRow = Boolean(appearance)
@@ -128,8 +229,11 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
       id={`reorder-row-${id}`}
       ref={setNodeRef}
       style={{
-        transform: !isDragging || coloredRow ? CSS.Translate.toString(transform) : undefined,
-        transition,
+        marginBottom: layout?.removedId === id ? -layout.height : undefined,
+        transform: layout && layout.insertionIndex >= 0 && index >= layout.insertionIndex
+          ? `translateY(${layout.height}px)`
+          : !isDragging || coloredRow ? CSS.Translate.toString(transform) : undefined,
+        transition: dragPending && menu ? 'none' : transition,
         zIndex: coloredRow && isDragging ? 1 : undefined,
       }}
       onPointerDown={beginSwipe}
@@ -176,6 +280,7 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
             style={appearance ? { color: 'inherit' } : undefined}
             {...attributes}
             {...listeners}
+            aria-disabled={dragPending || undefined}
             aria-label={`Déplacer ${label}`}
           >
             <GripVertical size={19} />
@@ -187,7 +292,7 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
   )
 }
 
-export function CategoryDrop({ id, children }: { id: string; children: ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
-  return <section ref={setNodeRef} className={`list-group ${isOver ? 'is-over' : ''}`}>{children}</section>
+export function CategoryDrop({ id, expanded, children }: { id: string; expanded: boolean; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id, data: { expanded } })
+  return <section id={id} ref={setNodeRef} className={`list-group ${isOver ? 'is-over' : ''}`}>{children}</section>
 }

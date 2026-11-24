@@ -4,6 +4,7 @@ import Dexie, { liveQuery } from 'dexie'
 import { database, PaniDatabase, type Item } from './database'
 import { addToShopping, changeQuantity, deleteItem, saveItem, setItemChecked, uncheckAll } from './items'
 import { deleteCategory, saveCategory } from './categories'
+import { moveItem } from './order'
 import type { UndoAction } from './undo'
 
 let db: PaniDatabase
@@ -131,6 +132,35 @@ test('annule les modifications et suppressions en conservant les données des au
     await undo()
     expect(await database.items.get(id)).toMatchObject({ shopping: { checkedAt: firstCheck } })
     expect(await database.items.get(other)).toMatchObject({ shopping: { checkedAt: secondCheck, quantity: '3 kg' } })
+  } finally {
+    await database.delete()
+  }
+})
+
+test('annule un déplacement sans écraser les changements de quantité ni une position occupée', async () => {
+  const history: UndoAction[] = []
+  const record = (action: UndoAction) => history.push(action)
+  try {
+    await database.open()
+    await saveCategory('Rayon', '#123456', '')
+    const category = await database.categories.toCollection().first()
+    if (!category) throw new Error('Catégorie absente.')
+    const item = await saveItem('Pâtes', '1 kg', null)
+    await moveItem(item, { categoryId: category.id }, record)
+    await addToShopping(item)
+    await changeQuantity(item, 1, true)
+    await expect(history.pop()?.()).resolves.toBe(true)
+    expect(await database.items.get(item)).toMatchObject({
+      categoryId: null, position: 0, shopping: { quantity: '2 kg' },
+    })
+
+    await moveItem(item, { categoryId: category.id }, record)
+    const other = await saveItem('Riz', '1', null)
+    const revision = (await database.readState()).revision
+    await expect(history.pop()?.()).resolves.toBe(false)
+    expect((await database.readState()).revision).toBe(revision)
+    expect(await database.items.get(item)).toMatchObject({ categoryId: category.id, position: 0 })
+    expect(await database.items.get(other)).toMatchObject({ categoryId: null, position: 0 })
   } finally {
     await database.delete()
   }

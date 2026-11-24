@@ -1,4 +1,3 @@
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Cloud, Pencil, Plus, ShoppingBasket, Trash2, Undo2, X } from 'lucide-react'
 import { useLayoutEffect, useRef, useState, type FocusEvent } from 'react'
@@ -10,7 +9,7 @@ import { CategoryEditor } from './components/CategoryEditor'
 import { ItemEditor } from './components/ItemEditor'
 import { CategoryDisclosure } from './components/CategoryDisclosure'
 import { QuantityStepper } from './components/QuantityStepper'
-import { CategoryDrop, Reorder, SortableRow } from './components/Reorder'
+import { CategoryDrop, ItemSortGroup, Reorder, SortableRow } from './components/Reorder'
 import { ShoppingView } from './components/ShoppingView'
 import { UpdateNotice } from './components/UpdateNotice'
 import { useConfirm } from './components/ui/confirm'
@@ -18,7 +17,8 @@ import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
 import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
 import { animateRemoval, animateSavedItem } from './lib/list-motion'
-import { moveItem } from './data/order'
+import { moveItem, planItemMove } from './data/order'
+import { useOrderPreview } from './lib/useOrderPreview'
 import { useUndoHistory } from './lib/useUndoHistory'
 import type { RecordUndo } from './data/undo'
 
@@ -52,10 +52,14 @@ export function App() {
   const [openMenu, setOpenMenu] = useState<string>()
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
 
-  const items = result?.list?.items ?? []
+  const revision = result?.list?.state.revision ?? 0
+  const itemOrder = useOrderPreview(revision)
+  const categoryOrder = useOrderPreview(revision)
+  const items = itemOrder.apply(result?.list?.items ?? [])
   const categories = result?.list?.categories ?? []
   const mode = result?.list?.state.mode ?? 'list'
-  const undoUnavailable = !result?.list || !undo.history[mode].length || undo.busy
+  const movePending = mode === 'list' ? itemOrder.moving : mode === 'categories' && categoryOrder.moving
+  const undoUnavailable = !result?.list || !undo.history[mode].length || undo.busy || movePending
   const shoppingItems = items.flatMap((item) => item.shopping
     ? [{ ...item, quantity: item.shopping.quantity, checkedAt: item.shopping.checkedAt }]
     : [])
@@ -98,7 +102,15 @@ export function App() {
 
   function reorder(item: Item, destination: Parameters<typeof moveItem>[1]) {
     setOpenMenu(undefined)
-    return run(() => moveItem(item.id, destination), 'Impossible de déplacer cet article.', `${item.name} déplacé.`)
+    return run(
+      async () => {
+        const changes = planItemMove(items, item, destination)
+        if (!changes.length) return
+        await itemOrder.commit(changes, () => moveItem(item.id, destination, recordListUndo))
+        toast.success(`${item.name} déplacé.`)
+      },
+      'Impossible de déplacer cet article.',
+    )
   }
 
   async function remove(item: Item) {
@@ -176,7 +188,7 @@ export function App() {
         <div key={mode} className="screen-transition" onFocus={revealFocusedControl}>
           {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
           {!result && <p role="status">Ouverture de la liste…</p>}
-          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} recordUndo={(action) => undo.record('categories', action)} />}
+          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} order={categoryOrder} recordUndo={(action) => undo.record('categories', action)} />}
           {result?.list && mode === 'shopping' && <ShoppingView items={shoppingItems} categories={categories} recordUndo={(action) => undo.record('shopping', action)} />}
           {result?.list && mode === 'list' && (
             <>
@@ -199,8 +211,8 @@ export function App() {
                 </Button>
               </div>
               {!groups.length && <p className="empty-group">Aucun résultat.</p>}
-              <Reorder onDrop={({ active, over }) => {
-                if (!over || active.id === over.id) return
+              <Reorder hasCategoryTargets onStart={() => setOpenMenu(undefined)} onDrop={({ active, over }) => {
+                if (!over || active.id === over.id || itemOrder.moving) return
                 const item = items.find((entry) => entry.id === active.id)
                 const target = items.find((entry) => entry.id === over.id)
                 const targetId = String(over.id)
@@ -213,77 +225,78 @@ export function App() {
                 {groups.map(({ category, items: groupItems }) => {
                   const categoryId = category?.id ?? null
                   const expanded = Boolean(term) || !collapsedCategories.has(categoryId)
+                  const groupId = `category:${categoryId ?? ''}`
                   return (
-                    <CategoryDrop key={categoryId ?? 'none'} id={`category:${categoryId ?? ''}`}>
+                    <CategoryDrop key={categoryId ?? 'none'} id={groupId} expanded={expanded}>
                       <CategoryDisclosure category={category} count={groupItems.length} expanded={expanded}
                         searching={Boolean(term)} onToggle={() => toggleCategory(categoryId)}>
                         {groupItems.length === 0 && (
                           <p className="empty-group">{!category && !items.length ? 'Votre liste est vide.' : 'Aucun article'}</p>
                         )}
-                        <SortableContext items={groupItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                          <ul className="divide-y divide-border">
-                            {groupItems.map((item) => (
-                              <SortableRow
-                                key={item.id}
-                                id={item.id}
-                                label={item.name}
-                                disabled={Boolean(term) || !expanded}
-                                dropDisabled={!expanded}
-                                menuOpen={openMenu === item.id}
-                                onSwipeRight={() => void addPurchase(item)}
-                                onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
-                                menu={
-                                  <>
-                                    <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={() => void addPurchase(item)}><ShoppingBasket size={18} /></button>
-                                    <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
-                                    <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
-                                    <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
-                                  </>
-                                }
+                        <ItemSortGroup id={groupId} itemIds={groupItems.map((item) => item.id)}
+                          expanded={expanded} committing={itemOrder.moving}>
+                          {groupItems.map((item) => (
+                            <SortableRow
+                              key={item.id}
+                              id={item.id}
+                              label={item.name}
+                              disabled={Boolean(term) || !expanded}
+                              dropDisabled={!expanded}
+                              dragPending={itemOrder.moving}
+                              menuOpen={openMenu === item.id}
+                              onSwipeRight={() => void addPurchase(item)}
+                              onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
+                              menu={
+                                <>
+                                  <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={() => void addPurchase(item)}><ShoppingBasket size={18} /></button>
+                                  <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
+                                  <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
+                                  <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
+                                </>
+                              }
+                            >
+                              <button
+                                type="button"
+                                data-swipe-trigger
+                                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
+                                aria-label={`Actions pour ${item.name}`}
+                                aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
+                                aria-expanded={openMenu === item.id}
+                                aria-controls={`actions-${item.id}`}
+                                aria-keyshortcuts="Alt+ArrowRight"
+                                onKeyDown={(event) => {
+                                  if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
+                                  event.preventDefault()
+                                  void addPurchase(item)
+                                }}
+                                onClick={(event) => {
+                                  const open = openMenu !== item.id
+                                  setOpenMenu(open ? item.id : undefined)
+                                  if (open && event.detail === 0) {
+                                    requestAnimationFrame(() => document
+                                      .getElementById(`actions-${item.id}`)
+                                      ?.querySelector('button')
+                                      ?.focus({ preventScroll: true }))
+                                  }
+                                }}
                               >
-                                <button
-                                  type="button"
-                                  data-swipe-trigger
-                                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
-                                  aria-label={`Actions pour ${item.name}`}
-                                  aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
-                                  aria-expanded={openMenu === item.id}
-                                  aria-controls={`actions-${item.id}`}
-                                  aria-keyshortcuts="Alt+ArrowRight"
-                                  onKeyDown={(event) => {
-                                    if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
-                                    event.preventDefault()
-                                    void addPurchase(item)
-                                  }}
-                                  onClick={(event) => {
-                                    const open = openMenu !== item.id
-                                    setOpenMenu(open ? item.id : undefined)
-                                    if (open && event.detail === 0) {
-                                      requestAnimationFrame(() => document
-                                        .getElementById(`actions-${item.id}`)
-                                        ?.querySelector('button')
-                                        ?.focus({ preventScroll: true }))
-                                    }
-                                  }}
-                                >
-                                  <span className="min-w-0 break-words">{item.name}</span>
-                                  {item.shopping && (
-                                    <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
-                                      <span className="sr-only">Dans Courses</span>
-                                      <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
-                                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
-                                      </svg>
-                                    </span>
-                                  )}
-                                </button>
-                                <QuantityStepper item={item} onChange={(delta) => void run(
-                                  () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
-                                )} />
-                              </SortableRow>
-                            ))}
-                          </ul>
-                        </SortableContext>
+                                <span className="min-w-0 break-words">{item.name}</span>
+                                {item.shopping && (
+                                  <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                                    <span className="sr-only">Dans Courses</span>
+                                    <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
+                                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
+                                    </svg>
+                                  </span>
+                                )}
+                              </button>
+                              <QuantityStepper item={item} onChange={(delta) => void run(
+                                () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
+                              )} />
+                            </SortableRow>
+                          ))}
+                        </ItemSortGroup>
                       </CategoryDisclosure>
                     </CategoryDrop>
                   )
