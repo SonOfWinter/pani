@@ -764,11 +764,13 @@ for (const mode of ['Liste', 'Catégories'] as const) {
 
     const release = await holdOrderWrite(page, mode === 'Liste' ? 'items' : 'categories')
     try {
-      await page.evaluate((id) => {
+      await page.evaluate(({ id, destinationY }) => {
         const sourceRow = document.getElementById(id)
         if (!sourceRow) throw new Error('Ligne source introuvable.')
         const initialY = sourceRow.getBoundingClientRect().y
         document.addEventListener('pointerup', () => {
+          const releasedRow = document.querySelector('.drag-preview') ?? sourceRow
+          const releaseOffset = Math.abs(releasedRow.getBoundingClientRect().y - destinationY)
           const frames: number[] = []
           let settles = false
           function sample() {
@@ -780,11 +782,12 @@ for (const mode of ['Liste', 'Catégories'] as const) {
             else {
               document.documentElement.dataset.dropFrames = JSON.stringify(frames)
               document.documentElement.dataset.dropSettles = String(settles)
+              document.documentElement.dataset.dropOffset = String(releaseOffset)
             }
           }
           requestAnimationFrame(sample)
         }, { capture: true, once: true })
-      }, sourceId)
+      }, { id: sourceId, destinationY: target.y })
       await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
       await page.mouse.down()
       await page.mouse.move(target.x + target.width / 2, target.y + target.height * 0.4, { steps: 12 })
@@ -797,11 +800,14 @@ for (const mode of ['Liste', 'Catégories'] as const) {
       await expect(rows).toHaveText([/Poires/, /Riz/, /Pommes/], { timeout: 1000 })
       const root = page.locator('html')
       await expect(root).toHaveAttribute('data-drop-frames', /\[/)
-      await expect(root).toHaveAttribute('data-drop-settles', 'true')
       const frames = JSON.parse(await root.getAttribute('data-drop-frames') ?? '[]') as number[]
       expect(frames).toHaveLength(8)
       expect(Math.min(...frames)).toBeGreaterThan(1)
-      expect(new Set(frames.map(Math.round)).size).toBeGreaterThan(1)
+      // A row already aligned with its destination has no distance left to animate.
+      if (Number(await root.getAttribute('data-drop-offset')) > 2) {
+        await expect(root).toHaveAttribute('data-drop-settles', 'true')
+        expect(new Set(frames.map(Math.round)).size).toBeGreaterThan(1)
+      }
       await expect.poll(async () => {
         const placed = await row('Pommes').boundingBox()
         const preceding = await row('Riz').boundingBox()
