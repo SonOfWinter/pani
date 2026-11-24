@@ -106,13 +106,18 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
   }
 
   async function resetChecks() {
+    const first = checked[0]
+    if (!first) return
+    focusAfterChange.current = { id: first.id, destination: `purchase-${first.id}` }
     try {
       if (await uncheckAll(recordUndo)) {
         setAnnouncement('Tous les articles sont de nouveau à acheter.')
-        requestAnimationFrame(() => focusShoppingControl(`purchase-${checked[0]?.id}`))
+      } else {
+        focusAfterChange.current = null
       }
       setError('')
     } catch {
+      focusAfterChange.current = null
       setError('Impossible de tout décocher.')
     }
   }

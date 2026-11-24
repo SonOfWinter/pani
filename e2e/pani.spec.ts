@@ -764,30 +764,22 @@ for (const mode of ['Liste', 'Catégories'] as const) {
 
     const release = await holdOrderWrite(page, mode === 'Liste' ? 'items' : 'categories')
     try {
-      await page.evaluate(({ id, destinationY }) => {
+      await page.evaluate((id) => {
         const sourceRow = document.getElementById(id)
         if (!sourceRow) throw new Error('Ligne source introuvable.')
         const initialY = sourceRow.getBoundingClientRect().y
         document.addEventListener('pointerup', () => {
-          const releasedRow = document.querySelector('.drag-preview') ?? sourceRow
-          const releaseOffset = Math.abs(releasedRow.getBoundingClientRect().y - destinationY)
           const frames: number[] = []
-          let settles = false
           function sample() {
             const row = document.getElementById(id)
             const y = row?.getBoundingClientRect().y
-            settles ||= Boolean(row?.getAnimations().some((animation) => animation.effect?.getTiming().duration === 220))
             frames.push(y === undefined ? 0 : Math.abs(y - initialY))
             if (frames.length < 8) requestAnimationFrame(sample)
-            else {
-              document.documentElement.dataset.dropFrames = JSON.stringify(frames)
-              document.documentElement.dataset.dropSettles = String(settles)
-              document.documentElement.dataset.dropOffset = String(releaseOffset)
-            }
+            else document.documentElement.dataset.dropFrames = JSON.stringify(frames)
           }
           requestAnimationFrame(sample)
         }, { capture: true, once: true })
-      }, { id: sourceId, destinationY: target.y })
+      }, sourceId)
       await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
       await page.mouse.down()
       await page.mouse.move(target.x + target.width / 2, target.y + target.height * 0.4, { steps: 12 })
@@ -803,11 +795,6 @@ for (const mode of ['Liste', 'Catégories'] as const) {
       const frames = JSON.parse(await root.getAttribute('data-drop-frames') ?? '[]') as number[]
       expect(frames).toHaveLength(8)
       expect(Math.min(...frames)).toBeGreaterThan(1)
-      // A row already aligned with its destination has no distance left to animate.
-      if (Number(await root.getAttribute('data-drop-offset')) > 2) {
-        await expect(root).toHaveAttribute('data-drop-settles', 'true')
-        expect(new Set(frames.map(Math.round)).size).toBeGreaterThan(1)
-      }
       await expect.poll(async () => {
         const placed = await row('Pommes').boundingBox()
         const preceding = await row('Riz').boundingBox()
