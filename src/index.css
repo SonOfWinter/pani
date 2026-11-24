@@ -276,6 +276,24 @@ html:has(.pani-modal[open]) {
   @apply px-3 py-3 text-sm text-muted-foreground;
 }
 
+.list-sortable-items {
+  display: flow-root;
+  transition: padding-bottom 180ms ease;
+}
+
+.list-sortable-items > .sortable-row {
+  transition: transform 180ms ease;
+}
+
+.list-sortable-items[data-committing="true"],
+.list-sortable-items[data-dragging="true"] {
+  transition: none;
+}
+
+.list-sortable-items[data-dragging="true"] .swipe-menu {
+  visibility: hidden;
+}
+
 .sortable-row {
   @apply relative isolate overflow-hidden;
 }
@@ -285,7 +303,7 @@ html:has(.pani-modal[open]) {
 }
 
 .sortable-row.is-dragging .row-content {
-  opacity: 0.3;
+  clip-path: inset(50%);
 }
 
 .row-content {
@@ -352,6 +370,7 @@ html:has(.pani-modal[open]) {
 
 @media (prefers-reduced-motion: reduce) {
   .swipe-content,
+  .list-sortable-items,
   .category-panel,
   .category-chevron,
   .bottom-nav-indicator,

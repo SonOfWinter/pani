@@ -7,12 +7,13 @@ async function waitForSheet(popup: Locator) {
   )
 }
 
-async function addItem(page: Page, name: string, quantity = '') {
+async function addItem(page: Page, name: string, quantity = '', category?: string) {
   await page.getByRole('button', { name: 'Ajouter un article' }).click()
   const form = page.getByRole('dialog', { name: 'Ajouter un article' })
   await waitForSheet(form)
   await form.getByLabel('Nom', { exact: true }).fill(name)
   await form.getByLabel('Quantité (facultatif)').fill(quantity)
+  if (category) await form.getByRole('combobox').selectOption({ label: category })
   await form.getByRole('button', { name: 'Enregistrer' }).click()
   await expect(form).toBeHidden()
 }
@@ -338,10 +339,21 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   if (!source || !target) throw new Error('Cible de dépôt introuvable.')
   await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
   await page.mouse.down()
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 16 })
+  const startX = source.x + source.width / 2
+  const startY = source.y + source.height / 2
+  await page.mouse.move(startX, startY - 8, { steps: 4 })
+  const preview = page.locator('.drag-preview')
+  const rail = await preview.boundingBox()
+  if (!rail) throw new Error('Aperçu introuvable.')
+  const edge = (page.viewportSize()?.width ?? 390) - 4
+  await page.mouse.move(edge, target.y + target.height / 2, { steps: 16 })
+  const moved = await preview.boundingBox()
+  expect(moved?.x).toBeCloseTo(rail.x, 0)
+  expect(moved?.y).not.toBeCloseTo(rail.y, 0)
   await page.mouse.up()
   await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
   await expect(category.getByText('🍇', { exact: true })).toBeVisible()
+  await expect(page.getByText('Pommes déplacé.', { exact: true })).toBeVisible()
   await page.reload()
   await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
   await swipeIntoShopping(page, 'Pommes')
@@ -387,8 +399,17 @@ test('une catégorie reste dans sa colonne pendant un déplacement latéral', as
   }
 
   await page.mouse.move(right, following.y + following.height / 2, { steps: 10 })
+  await expect.poll(async () => {
+    const box = await followingRow.boundingBox()
+    return Boolean(box && box.y < following.y - 1)
+  }).toBe(true)
   await page.mouse.up()
   await expect(page.getByRole('listitem')).toHaveText([/Fruits/, /Boissons/, /Pain/])
+  const undo = page.getByRole('button', { name: 'Annuler la dernière action' })
+  await expect(undo).toBeEnabled()
+  // The pointer sensor suppresses release clicks for 50 ms after the drop.
+  await undo.click({ delay: 75 })
+  await expect(page.getByRole('main').getByRole('listitem')).toHaveText([/Fruits/, /Pain/, /Boissons/])
 })
 
 
@@ -475,6 +496,7 @@ test('annule cinq actions par écran et retire un ajout modifié dans Courses ho
   await page.getByText('Articles pris (1)').click()
   await page.getByRole('button', { name: 'Tout décocher' }).click()
   await expect(page.getByRole('checkbox', { name: 'Avoine' })).not.toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Avoine' })).toBeFocused()
   await undo.press('Enter')
   await expect(page.getByText('Articles pris (1)')).toBeVisible()
 
@@ -652,6 +674,7 @@ test('plie un rayon, compte ses résultats et accepte un dépôt sur son bandeau
   await expect(fruits).toHaveAttribute('aria-expanded', 'false')
   await expect(uncategorized.getByText('1 art.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Actions pour Pommes' })).toBeHidden()
+  await expect(page.getByText('Pommes déplacé.', { exact: true })).toBeVisible()
   await page.reload()
   await expect(fruits).toHaveAttribute('aria-expanded', 'true')
   await expect(page.getByRole('button', { name: 'Actions pour Pommes' })).toBeVisible()
@@ -685,4 +708,206 @@ test('anime les rayons de Courses et compte seulement les articles à acheter', 
   await page.getByRole('checkbox', { name: 'Pommes' }).click()
   await expect(category).toHaveAccessibleDescription('1 article')
   await expect(page.getByText('Articles pris (1)')).toBeVisible()
+})
+
+async function holdOrderWrite(page: Page, table: 'items' | 'categories') {
+  await page.evaluate((tableName) => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('pani')
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const db = open.result
+      const transaction = db.transaction(tableName, 'readwrite')
+      const store = transaction.objectStore(tableName)
+      const keepAlive = () => {
+        const request = store.get('playwright-lock')
+        request.onsuccess = () => {
+          if (!document.documentElement.hasAttribute('data-release-idb')) keepAlive()
+        }
+      }
+      transaction.oncomplete = () => db.close()
+      // Acquire the transaction before allowing the test to start the drag.
+      const first = store.get('playwright-lock')
+      first.onerror = () => reject(first.error)
+      first.onsuccess = () => { keepAlive(); resolve() }
+    }
+  }), table)
+  return () => page.evaluate(() => document.documentElement.setAttribute('data-release-idb', ''))
+}
+
+for (const mode of ['Liste', 'Catégories'] as const) {
+  test(`stabilise le dépôt dans ${mode} pendant une écriture IndexedDB`, async ({ page }) => {
+    await page.goto('/')
+    const names = ['Pommes', 'Poires', 'Riz']
+    if (mode === 'Liste') {
+      for (const name of names) await addItem(page, name)
+    } else {
+      await page.getByRole('button', { name: mode, exact: true }).click()
+      for (const name of names) {
+        await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
+        const form = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+        await waitForSheet(form)
+        await form.getByLabel('Nom', { exact: true }).fill(name)
+        await form.getByRole('button', { name: 'Enregistrer' }).click()
+        await expect(form).toBeHidden()
+      }
+    }
+
+    const rows = page.getByRole('main').getByRole('listitem')
+    const row = (name: string) => rows.filter({ has: page.getByRole('button', {
+      name: mode === 'Liste' ? `Actions pour ${name}` : `Modifier ${name}`,
+    }) })
+    const handle = row('Pommes').getByRole('button', { name: 'Déplacer Pommes' })
+    const source = await handle.boundingBox()
+    const target = await row('Riz').boundingBox()
+    const sourceId = await row('Pommes').getAttribute('id')
+    if (!source || !target || !sourceId) throw new Error('Source ou destination introuvable.')
+
+    const release = await holdOrderWrite(page, mode === 'Liste' ? 'items' : 'categories')
+    try {
+      await page.evaluate((id) => {
+        const sourceRow = document.getElementById(id)
+        if (!sourceRow) throw new Error('Ligne source introuvable.')
+        const initialY = sourceRow.getBoundingClientRect().y
+        document.addEventListener('pointerup', () => {
+          const frames: number[] = []
+          let settles = false
+          function sample() {
+            const row = document.getElementById(id)
+            const y = row?.getBoundingClientRect().y
+            settles ||= Boolean(row?.getAnimations().some((animation) => animation.effect?.getTiming().duration === 220))
+            frames.push(y === undefined ? 0 : Math.abs(y - initialY))
+            if (frames.length < 8) requestAnimationFrame(sample)
+            else {
+              document.documentElement.dataset.dropFrames = JSON.stringify(frames)
+              document.documentElement.dataset.dropSettles = String(settles)
+            }
+          }
+          requestAnimationFrame(sample)
+        }, { capture: true, once: true })
+      }, sourceId)
+      await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height / 4, { steps: 12 })
+      await page.mouse.up()
+      await expect(rows).toHaveText([/Poires/, /Riz/, /Pommes/], { timeout: 1000 })
+      const root = page.locator('html')
+      await expect(root).toHaveAttribute('data-drop-frames', /\[/)
+      await expect(root).toHaveAttribute('data-drop-settles', 'true')
+      const frames = JSON.parse(await root.getAttribute('data-drop-frames') ?? '[]') as number[]
+      expect(frames).toHaveLength(8)
+      expect(Math.min(...frames)).toBeGreaterThan(1)
+      expect(new Set(frames.map(Math.round)).size).toBeGreaterThan(1)
+      await expect.poll(async () => {
+        const placed = await row('Pommes').boundingBox()
+        const preceding = await row('Riz').boundingBox()
+        return Boolean(placed && preceding && placed.y >= preceding.y + preceding.height - 1)
+      }).toBe(true)
+    } finally {
+      await release()
+    }
+
+    const confirmation = mode === 'Liste' ? 'Pommes déplacé.' : 'Pommes déplacée.'
+    await expect(page.getByText(confirmation, { exact: true })).toBeVisible()
+    await page.reload()
+    await expect(rows).toHaveText([/Poires/, /Riz/, /Pommes/])
+    await handle.press('Space')
+    await handle.press('ArrowUp')
+    await handle.press('Escape')
+    await expect(rows).toHaveText([/Poires/, /Riz/, /Pommes/])
+  })
+}
+
+test('écarte les lignes du rayon de destination avant le dépôt', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
+  const form = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+  await waitForSheet(form)
+  await form.getByLabel('Nom', { exact: true }).fill('Fruits')
+  await form.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(form).toBeHidden()
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await addItem(page, 'Poires', '', 'Fruits')
+  await addItem(page, 'Oranges', '', 'Fruits')
+  await addItem(page, 'Pommes')
+
+  const fruits = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Fruits', exact: true }) })
+  const uncategorized = page.locator('section').filter({ has: page.getByRole('heading', {
+    name: 'Sans catégorie', exact: true,
+  }) })
+  const rows = fruits.getByRole('listitem')
+  const first = fruits.getByRole('button', { name: 'Actions pour Poires' }).locator('../..')
+  const second = fruits.getByRole('button', { name: 'Actions pour Oranges' }).locator('../..')
+  const handle = page.getByRole('button', { name: 'Déplacer Pommes' })
+  const source = await handle.boundingBox()
+  const dragged = await handle.locator('../..').boundingBox()
+  const target = await first.boundingBox()
+  const following = await second.boundingBox()
+  if (!source || !dragged || !target || !following) throw new Error('Ligne introuvable.')
+
+  async function hoverDestination() {
+    if (!source || !target) throw new Error('Ligne introuvable.')
+    await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 16 })
+  }
+
+  await hoverDestination()
+  await expect(uncategorized.getByRole('list')).toHaveCSS('height', '0px')
+  const sourceRow = handle.locator('../..')
+  await expect(sourceRow.locator('.row-content')).toHaveCSS('clip-path', 'inset(50%)')
+  await expect(sourceRow.locator('.swipe-menu')).toHaveCSS('visibility', 'hidden')
+  await expect(first.locator('.swipe-menu')).toHaveCSS('visibility', 'hidden')
+  await expect(page.locator('.drag-preview')).toHaveCSS('opacity', '1')
+  const firstOffset = async () => Math.round((await first.boundingBox())!.y - target.y)
+  const secondOffset = async () => Math.round((await second.boundingBox())!.y - following.y)
+  await expect.poll(async () => {
+    const offset = await firstOffset()
+    return offset >= Math.round(dragged.height) && offset === await secondOffset()
+  }).toBe(true)
+  await expect(rows).toHaveText([/Poires/, /Oranges/])
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  await expect.poll(firstOffset).toBe(0)
+  await expect(uncategorized.getByRole('list')).not.toHaveCSS('height', '0px')
+  await handle.locator('..').getByRole('button', { name: 'Actions pour Pommes' }).press('Enter')
+  await expect(page.getByRole('button', { name: 'Modifier Pommes' })).toBeVisible()
+  await page.getByRole('button', { name: 'Modifier Pommes' }).press('Escape')
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await hoverDestination()
+  await expect(first).toHaveCSS('transition-duration', '0s')
+  await expect.poll(firstOffset).toBeGreaterThanOrEqual(Math.round(dragged.height))
+  await page.mouse.up()
+  await expect(rows).toHaveText([/Pommes/, /Poires/, /Oranges/])
+  const movedRow = rows.filter({ has: page.getByRole('button', { name: 'Actions pour Pommes' }) })
+  expect(await movedRow.evaluate((row) =>
+    row.getAnimations().some((animation) => animation.effect?.getTiming().duration === 220),
+  )).toBe(false)
+  await expect(page.getByText('Pommes déplacé.', { exact: true })).toBeVisible()
+  const undo = page.getByRole('button', { name: 'Annuler la dernière action' })
+  await expect(undo).toBeEnabled()
+  // The pointer sensor suppresses release clicks for 50 ms after the drop.
+  await undo.click({ delay: 75 })
+  await expect(rows).toHaveText([/Poires/, /Oranges/])
+  await expect(uncategorized.getByRole('button', { name: 'Actions pour Pommes' })).toBeVisible()
+  await page.reload()
+  await expect(rows).toHaveText([/Poires/, /Oranges/])
+  await expect(uncategorized.getByRole('button', { name: 'Actions pour Pommes' })).toBeVisible()
+
+  const reverseHandle = await fruits.getByRole('button', { name: 'Déplacer Poires' }).boundingBox()
+  const reverseRow = await fruits.getByRole('listitem').first().boundingBox()
+  const sourceList = await fruits.getByRole('list').boundingBox()
+  const reverseTarget = await uncategorized.getByRole('listitem').first().boundingBox()
+  if (!reverseHandle || !reverseRow || !sourceList || !reverseTarget) throw new Error('Ligne introuvable.')
+  await page.mouse.move(reverseHandle.x + reverseHandle.width / 2, reverseHandle.y + reverseHandle.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(reverseTarget.x + reverseTarget.width / 2, reverseTarget.y + reverseTarget.height / 2, { steps: 16 })
+  await expect.poll(async () => Math.round((await fruits.getByRole('list').boundingBox())?.height ?? 0))
+    .toBe(Math.round(sourceList.height - reverseRow.height))
+  const targetAfterCompaction = await uncategorized.getByRole('button', { name: 'Sans catégorie', exact: true }).boundingBox()
+  if (!targetAfterCompaction) throw new Error('Rayon introuvable.')
+  await page.mouse.move(targetAfterCompaction.x + targetAfterCompaction.width / 2, targetAfterCompaction.y + targetAfterCompaction.height / 2)
+  await page.mouse.up()
+  await expect(uncategorized.getByRole('button', { name: 'Actions pour Poires' })).toBeVisible()
 })

@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import { categoryColor, deleteCategory, icons, saveCategory } from '../data/categories'
 import type { Category } from '../data/database'
-import { moveCategory } from '../data/order'
+import { moveCategory, planCategoryMove } from '../data/order'
+import type { useOrderPreview } from '../lib/useOrderPreview'
 import type { RecordUndo } from '../data/undo'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { Reorder, SortableRow } from './Reorder'
@@ -86,23 +87,22 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
   )
 }
 
-export function CategoryEditor({ categories, recordUndo }: { categories: Category[]; recordUndo: RecordUndo }) {
+export function CategoryEditor({ categories, order, recordUndo }: { categories: Category[]; order: ReturnType<typeof useOrderPreview>; recordUndo: RecordUndo }) {
   const [editor, setEditor] = useState<{ category: Category | null }>()
   const [error, setError] = useState('')
-  const [moving, setMoving] = useState(false)
+  const visibleCategories = order.apply(categories)
   const [announcement, setAnnouncement] = useState('')
 
   async function reorder(id: string, target: string) {
-    setMoving(true)
     setError('')
     try {
-      await moveCategory(id, target)
+      const changes = planCategoryMove(categories, id, target)
+      if (!changes.length) return
+      await order.commit(changes, () => moveCategory(id, target, recordUndo))
       const name = categories.find((category) => category.id === id)?.name
       if (name) setAnnouncement(`${name} déplacée.`)
     } catch {
       setError('Impossible de déplacer cette catégorie.')
-    } finally {
-      setMoving(false)
     }
   }
 
@@ -114,13 +114,13 @@ export function CategoryEditor({ categories, recordUndo }: { categories: Categor
       <p role="status" className="sr-only">{announcement}</p>
       {error && <p role="alert">{error}</p>}
       {categories.length === 0 && <p className="empty-group">Aucune catégorie.</p>}
-      <Reorder verticalOnly showPreview={false} onDrop={({ active, over }) => {
-        if (over && active.id !== over.id) void reorder(String(active.id), String(over.id))
+      <Reorder showPreview={false} onDrop={({ active, over }) => {
+        if (over && active.id !== over.id && !order.moving) void reorder(String(active.id), String(over.id))
       }}>
-        <SortableContext items={categories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visibleCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
           <ul className="grid gap-1">
-            {categories.map((category) => (
-              <SortableRow key={category.id} id={category.id} label={category.name} disabled={moving} appearance={categoryBackground(category)}>
+            {visibleCategories.map((category) => (
+              <SortableRow key={category.id} id={category.id} label={category.name} dragPending={order.moving} appearance={categoryBackground(category)}>
                 <button
                   type="button"
                   className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left font-medium"
