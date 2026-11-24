@@ -787,7 +787,12 @@ for (const mode of ['Liste', 'Catégories'] as const) {
       }, sourceId)
       await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
       await page.mouse.down()
-      await page.mouse.move(target.x + target.width / 2, target.y + target.height / 4, { steps: 12 })
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height * 0.4, { steps: 12 })
+      // Riz moves up only once it has become the active destination.
+      await expect.poll(async () => {
+        const hovered = await row('Riz').boundingBox()
+        return Boolean(hovered && hovered.y < target.y - 1)
+      }).toBe(true)
       await page.mouse.up()
       await expect(rows).toHaveText([/Poires/, /Riz/, /Pommes/], { timeout: 1000 })
       const root = page.locator('html')
