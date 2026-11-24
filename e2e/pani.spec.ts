@@ -350,6 +350,7 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   const moved = await preview.boundingBox()
   expect(moved?.x).toBeCloseTo(rail.x, 0)
   expect(moved?.y).not.toBeCloseTo(rail.y, 0)
+  await expect(category).toHaveClass(/\bis-over\b/)
   await page.mouse.up()
   await expect(category.getByText('Pommes', { exact: true })).toBeVisible()
   await expect(category.getByText('🍇', { exact: true })).toBeVisible()
@@ -666,6 +667,7 @@ test('plie un rayon, compte ses résultats et accepte un dépôt sur son bandeau
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await page.mouse.down()
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 16 })
+  await expect(fruits.locator('xpath=ancestor::section[1]')).toHaveClass(/\bis-over\b/)
   await page.mouse.up()
   await expect(fruits.getByText('1 art.')).toBeVisible()
   expect(await fruits.evaluate((button) => button.scrollWidth)).toBe(
@@ -906,6 +908,7 @@ test('écarte les lignes du rayon de destination avant le dépôt', async ({ pag
   const targetAfterCompaction = await uncategorized.getByRole('button', { name: 'Sans catégorie', exact: true }).boundingBox()
   if (!targetAfterCompaction) throw new Error('Rayon introuvable.')
   await page.mouse.move(targetAfterCompaction.x + targetAfterCompaction.width / 2, targetAfterCompaction.y + targetAfterCompaction.height / 2)
+  await expect(uncategorized).toHaveClass(/\bis-over\b/)
   await page.mouse.up()
   await expect(uncategorized.getByRole('button', { name: 'Actions pour Poires' })).toBeVisible()
 })
