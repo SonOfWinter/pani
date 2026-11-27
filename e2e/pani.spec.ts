@@ -88,7 +88,7 @@ test('applique une mise à jour PWA depuis un petit écran et retrouve sa liste 
     await page.reload()
     await expect(update).toBeInViewport({ ratio: 1 })
 
-    for (const name of ['Catégories', 'Courses']) {
+    for (const name of ['Rayons', 'Courses']) {
       const tab = page.getByRole('button', { name, exact: true })
       await tab.click()
       await expect(tab).toHaveAttribute('aria-pressed', 'true')
@@ -120,7 +120,7 @@ test('ajoute un article aux courses au clavier et le retrouve après une relance
   await page.keyboard.press('Enter')
   await expect(page.getByText('Avoine ajouté aux courses.', { exact: true })).toBeVisible()
   await expect(item).toHaveAccessibleDescription('Dans Courses')
-  await expect(item.locator('svg')).toBeVisible()
+  await expect(item.locator('svg').first()).toBeVisible()
   await waitForOfflineShell(page)
 
   await context.setOffline(true)
@@ -128,6 +128,46 @@ test('ajoute un article aux courses au clavier et le retrouve après une relance
   await expect(item).toHaveAccessibleDescription('Dans Courses')
   await page.getByRole('button', { name: 'Courses', exact: true }).press('Enter')
   await expect(page.getByRole('checkbox', { name: 'Avoine' })).toBeVisible()
+})
+
+test('saisit la quantité directement dans Liste et Courses hors ligne', async ({ page, context }) => {
+  await page.goto('/')
+  await addItem(page, 'Riz', '200 g')
+  await swipeIntoShopping(page, 'Riz')
+  await expect(page.getByRole('button', { name: 'Actions pour Riz' })).toHaveAccessibleDescription('Dans Courses')
+  await waitForOfflineShell(page)
+  await context.setOffline(true)
+
+  const stepper = page.getByRole('group', { name: 'Quantité de Riz' })
+  const quantity = stepper.getByRole('textbox', { name: 'Saisir la quantité de Riz' })
+  const output = stepper.locator('output')
+  await quantity.tap()
+  await expect(quantity).toBeFocused()
+  await expect(quantity).toHaveValue('200')
+  expect(await quantity.evaluate((input: HTMLInputElement) =>
+    input.selectionStart === input.selectionEnd,
+  )).toBe(true)
+  await quantity.fill('300')
+  await quantity.press('Enter')
+  await expect(output).toHaveText('300 g')
+
+  await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  await expect(output).toHaveText('200 g')
+  await quantity.fill('450,5')
+  await quantity.press('Tab')
+  await expect(output).toHaveText('450,5 g')
+  await quantity.fill('0')
+  await quantity.press('Enter')
+  await expect(output).toHaveText('450,5 g')
+  await quantity.fill('900')
+  await quantity.press('Escape')
+  await quantity.press('Tab')
+  await expect(output).toHaveText('450,5 g')
+
+  await page.reload()
+  await expect(output).toHaveText('450,5 g')
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await expect(output).toHaveText('300 g')
 })
 
 test('prépare les achats puis termine ses courses après une relance hors ligne', async ({ page, context }) => {
@@ -292,10 +332,10 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await expect(action).toBeHidden()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Nom', exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-  const popup = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+  await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+  const popup = page.getByRole('dialog', { name: 'Ajouter un rayon' })
   await waitForSheet(popup)
   await popup.getByRole('textbox', { name: 'Nom', exact: true }).fill('Fruits')
   await popup.getByLabel('Couleur', { exact: true }).fill('#008877')
@@ -333,6 +373,7 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
   await expect(category.getByText('Aucun article')).toBeVisible()
   await expect(category.getByRole('heading')).toHaveCSS('background-color', 'rgb(0, 136, 119)')
 
+  await expect(page.locator('.screen-transition')).toHaveCSS('transform', 'none')
   const handle = page.getByRole('button', { name: 'Déplacer Pommes' })
   const source = await handle.boundingBox()
   const target = await category.getByText('Aucun article').boundingBox()
@@ -364,11 +405,11 @@ test('ajuste la quantité, révèle les actions et dépose dans une catégorie v
 
 test('une catégorie reste dans sa colonne pendant un déplacement latéral', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
 
   for (const name of ['Fruits', 'Pain', 'Boissons']) {
-    await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-    const popup = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+    await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+    const popup = page.getByRole('dialog', { name: 'Ajouter un rayon' })
     await waitForSheet(popup)
     await popup.getByRole('textbox', { name: 'Nom', exact: true }).fill(name)
     await popup.getByRole('button', { name: 'Enregistrer', exact: true }).click()
@@ -380,7 +421,7 @@ test('une catégorie reste dans sa colonne pendant un déplacement latéral', as
   const handle = await row.getByRole('button', { name: 'Déplacer Pain' }).boundingBox()
   const initial = await row.boundingBox()
   const following = await followingRow.boundingBox()
-  if (!handle || !initial || !following) throw new Error('Catégories introuvables.')
+  if (!handle || !initial || !following) throw new Error('Rayons introuvables.')
 
   const x = handle.x + handle.width / 2
   const y = handle.y + handle.height / 2
@@ -391,11 +432,11 @@ test('une catégorie reste dans sa colonne pendant un déplacement latéral', as
     await page.mouse.move(side, y, { steps: 10 })
     await expect.poll(async () => {
       const box = await row.boundingBox()
-      return box ? Math.round(box.x - initial.x) : null
+      return box ? Math.round(Math.abs(box.x - initial.x)) : null
     }).toBe(0)
     await expect.poll(async () => {
       const box = await followingRow.boundingBox()
-      return box ? Math.round(box.y - following.y) : null
+      return box ? Math.round(Math.abs(box.y - following.y)) : null
     }).toBe(0)
   }
 
@@ -451,9 +492,9 @@ test('les panneaux se ferment en touchant le fond et les actions affichent leur 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
-  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-  await expect(page.getByRole('dialog', { name: 'Ajouter une catégorie' })).toBeVisible()
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+  await expect(page.getByRole('dialog', { name: 'Ajouter un rayon' })).toBeVisible()
   await page.touchscreen.tap(outside.x, outside.y)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
@@ -533,12 +574,14 @@ test('affiche les notifications au-dessus de la navigation sur un petit écran',
   await page.goto('/')
   const name = 'Biscuits au chocolat noir et aux noisettes entières'
   await addItem(page, name)
-  await page.getByRole('button', { name: `Actions pour ${name}` }).press('Alt+ArrowRight')
-  const toast = page.getByText(`${name} ajouté aux courses.`, { exact: true })
+  await page.getByRole('button', { name: `Actions pour ${name}` }).click()
+  await page.getByRole('button', { name: `Supprimer ${name}` }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer', exact: true }).click()
+  const toast = page.getByText(`${name} supprimé.`, { exact: true })
   await expect(toast).toBeVisible()
 
   const navigation = page.getByRole('navigation', { name: 'Navigation principale' })
-  for (const mode of ['Liste', 'Courses', 'Catégories']) {
+  for (const mode of ['Liste', 'Courses', 'Rayons']) {
     const tab = navigation.getByRole('button', { name: mode, exact: true })
     await tab.click()
     await expect(tab).toHaveAttribute('aria-pressed', 'true')
@@ -582,13 +625,13 @@ test('garde le bandeau compact et les commandes visibles pendant le défilement'
 
   const header = page.getByRole('heading', { level: 1 }).locator('../..')
   const search = page.getByRole('searchbox')
-  for (const mode of ['Liste', 'Courses', 'Catégories']) {
+  for (const mode of ['Liste', 'Courses', 'Rayons']) {
     if (mode === 'Courses') await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.getByRole('button', { name: mode, exact: true }).click()
     await expect(header.getByRole('heading', { name: mode, level: 1 })).toBeVisible()
     const marker = mode === 'Liste' ? search
       : mode === 'Courses' ? page.getByRole('checkbox', { name: 'Article 0' })
-        : page.getByRole('button', { name: 'Ajouter une catégorie' })
+        : page.getByRole('button', { name: 'Ajouter un rayon' })
     await expect(marker).toBeVisible()
     await page.evaluate(() => window.scrollTo(0, 0))
     await expect(header).toHaveCSS('height', '88px')
@@ -600,6 +643,10 @@ test('garde le bandeau compact et les commandes visibles pendant le défilement'
     await expect(header.getByRole('button', { name: 'Annuler la dernière action' })).toBeInViewport({ ratio: 1 })
     if (mode === 'Courses') {
       await expect(header.getByRole('button', { name: 'Vider les courses' })).toBeInViewport({ ratio: 1 })
+      expect(await header.getByRole('button').evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute('aria-label')))).toEqual([
+        'Vider les courses', 'Annuler la dernière action', 'Sauvegardes',
+      ])
       await expect(header).toHaveCSS('transition-duration', '0s')
     }
     expect((await marker.boundingBox())?.y).toBeCloseTo(initialY - 140, 0)
@@ -646,9 +693,9 @@ test('plie un rayon, compte ses résultats et accepte un dépôt sur son bandeau
 
   await uncategorized.tap()
   await expect(uncategorized).toHaveAttribute('aria-expanded', 'false')
-  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
-  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-  const form = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+  const form = page.getByRole('dialog', { name: 'Ajouter un rayon' })
   await waitForSheet(form)
   const categoryName = 'Fruits'.repeat(12)
   await form.getByLabel('Nom', { exact: true }).fill(categoryName)
@@ -736,7 +783,7 @@ async function holdOrderWrite(page: Page, table: 'items' | 'categories') {
   return () => page.evaluate(() => document.documentElement.setAttribute('data-release-idb', ''))
 }
 
-for (const mode of ['Liste', 'Catégories'] as const) {
+for (const mode of ['Liste', 'Rayons'] as const) {
   test(`stabilise le dépôt dans ${mode} pendant une écriture IndexedDB`, async ({ page }) => {
     await page.goto('/')
     const names = ['Pommes', 'Poires', 'Riz']
@@ -745,8 +792,8 @@ for (const mode of ['Liste', 'Catégories'] as const) {
     } else {
       await page.getByRole('button', { name: mode, exact: true }).click()
       for (const name of names) {
-        await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-        const form = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+        await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+        const form = page.getByRole('dialog', { name: 'Ajouter un rayon' })
         await waitForSheet(form)
         await form.getByLabel('Nom', { exact: true }).fill(name)
         await form.getByRole('button', { name: 'Enregistrer' }).click()
@@ -819,9 +866,9 @@ for (const mode of ['Liste', 'Catégories'] as const) {
 
 test('écarte les lignes du rayon de destination avant le dépôt', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Catégories', exact: true }).click()
-  await page.getByRole('button', { name: 'Ajouter une catégorie' }).click()
-  const form = page.getByRole('dialog', { name: 'Ajouter une catégorie' })
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+  const form = page.getByRole('dialog', { name: 'Ajouter un rayon' })
   await waitForSheet(form)
   await form.getByLabel('Nom', { exact: true }).fill('Fruits')
   await form.getByRole('button', { name: 'Enregistrer' }).click()
@@ -839,6 +886,7 @@ test('écarte les lignes du rayon de destination avant le dépôt', async ({ pag
   const first = fruits.getByRole('button', { name: 'Actions pour Poires' }).locator('../..')
   const second = fruits.getByRole('button', { name: 'Actions pour Oranges' }).locator('../..')
   const handle = page.getByRole('button', { name: 'Déplacer Pommes' })
+  await handle.hover()
   const source = await handle.boundingBox()
   const dragged = await handle.locator('../..').boundingBox()
   const target = await first.boundingBox()
@@ -911,4 +959,191 @@ test('écarte les lignes du rayon de destination avant le dépôt', async ({ pag
   await expect(uncategorized).toHaveClass(/\bis-over\b/)
   await page.mouse.up()
   await expect(uncategorized.getByRole('button', { name: 'Actions pour Poires' })).toBeVisible()
+})
+
+test('joue la gerbe de particules sur les ajouts successifs et respecte les mouvements réduits', async ({ page }) => {
+  await page.goto('/')
+  for (const name of ['Poires', 'Pommes', 'Riz']) await addItem(page, name)
+  const item = (name: string) => page.getByRole('button', { name: `Actions pour ${name}` })
+  await item('Poires').press('Alt+ArrowRight')
+  await item('Pommes').press('Alt+ArrowRight')
+  for (const name of ['Poires', 'Pommes']) {
+    await expect(item(name)).toHaveAccessibleDescription('Dans Courses')
+    await expect(item(name).locator('.shopping-impact')).toHaveAttribute('data-effect', 'particules')
+    await expect(item(name).locator('.shopping-flight')).toHaveCount(1)
+    await expect(item(name).getByRole('status')).toHaveText(`${name} ajouté aux courses.`)
+  }
+  await expect(page.locator('.pani-toaster').getByText(/ajouté aux courses/)).toHaveCount(0)
+
+  await page.reload()
+  await expect(item('Poires').locator('.shopping-flight')).toHaveCount(0)
+  await item('Poires').press('Alt+ArrowRight')
+  const duplicateStatus = item('Poires').getByRole('status')
+  await expect(duplicateStatus).toHaveText('Poires est déjà dans les courses.')
+  await expect(duplicateStatus).toHaveClass('sr-only')
+  await expect(item('Poires').locator('.shopping-flight')).toHaveCount(0)
+  await expect(item('Poires').locator('.shopping-impact')).toHaveAttribute('data-effect', 'particules')
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await item('Riz').press('Alt+ArrowRight')
+  await expect(item('Riz')).toHaveAccessibleDescription('Dans Courses')
+  await expect(item('Riz').locator('.shopping-impact')).not.toHaveAttribute('data-effect', /./)
+  await item('Riz').press('Alt+ArrowRight')
+  await expect(item('Riz').getByRole('status')).toHaveText('Riz est déjà dans les courses.')
+  await expect(item('Riz').locator('.shopping-impact')).not.toHaveAttribute('data-effect', /./)
+})
+
+test('anime les quantités, l’annulation et la dernière coche', async ({ page }) => {
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (keyframes, options) {
+      const motion = document.documentElement.dataset
+      if (this.matches('.quantity-stepper output') && Array.isArray(keyframes)) {
+        motion.quantityMotion = String(keyframes[0]?.transform)
+      }
+      if (this.matches('.undo-sparks .completion-spark')) motion.undoMotion = 'particules'
+      if (this.matches('.shopping-check-effect') && Array.isArray(keyframes)) {
+        motion.checkMotion = String(keyframes.at(-1)?.strokeDashoffset)
+        motion.checkColor = getComputedStyle(this).backgroundColor
+      }
+      if (this.matches('.screen-header p, .screen-header p .shopping-count')) motion.shoppingCounter = this.textContent ?? ''
+      if (this.matches('#checked-items, #checked-items .shopping-count')) motion.checkedCounter = this.textContent ?? ''
+      if (this.matches('.shopping-complete')) motion.completedMotion = 'true'
+      if (this.matches('section.list-group') && Array.isArray(keyframes) && keyframes.at(-1)?.height === '0px') {
+        motion.categoryFold = 'true'
+      }
+      if (this.matches('.shopping-row') && Array.isArray(keyframes) && keyframes[0]?.clipPath) {
+        motion.returnMotion = 'true'
+      }
+      return animate.call(this, keyframes, options)
+    }
+  })
+  await page.goto('/')
+  await addItem(page, 'Poires')
+  const root = page.locator('html')
+  await page.getByRole('button', { name: 'Augmenter la quantité de Poires' }).click()
+  await expect(root).toHaveAttribute('data-quantity-motion', 'translateY(8px)')
+  await page.getByRole('button', { name: 'Diminuer la quantité de Poires' }).click()
+  await expect(root).toHaveAttribute('data-quantity-motion', 'translateY(-8px)')
+
+  const article = page.getByRole('button', { name: 'Actions pour Poires' })
+  await article.press('Alt+ArrowRight')
+  await expect(article).toHaveAccessibleDescription('Dans Courses')
+  await page.getByRole('button', { name: 'Annuler la dernière action' }).press('Enter')
+  await expect(article).not.toHaveAccessibleDescription('Dans Courses')
+  await expect(root).toHaveAttribute('data-undo-motion', 'particules')
+
+  await article.press('Alt+ArrowRight')
+  await expect(article).toHaveAccessibleDescription('Dans Courses')
+  await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  const checkbox = page.getByRole('checkbox', { name: 'Poires' })
+  await checkbox.click()
+  await expect(page.getByText('Courses terminées.', { exact: true })).toBeVisible()
+  await expect(root).toHaveAttribute('data-check-motion', '0')
+  await expect(root).toHaveAttribute('data-check-color', 'rgb(189, 23, 72)')
+  await expect(root).toHaveAttribute('data-shopping-counter', '0')
+  await expect(root).toHaveAttribute('data-checked-counter', '1')
+  await expect(root).toHaveAttribute('data-completed-motion', 'true')
+  await expect(root).toHaveAttribute('data-category-fold', 'true')
+  await page.getByText('Articles pris (1)', { exact: true }).click()
+  await checkbox.click()
+  await expect(checkbox).not.toBeChecked()
+  await expect(root).toHaveAttribute('data-check-motion', '24')
+  await expect(root).toHaveAttribute('data-check-color', 'rgb(189, 23, 72)')
+  await expect(root).toHaveAttribute('data-return-motion', 'true')
+})
+
+test('anime les écritures des articles et rayons et le passage entre les vues', async ({ page }) => {
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (keyframes, options) {
+      const motion = document.documentElement.dataset
+      if (this.matches('.row-content') && Array.isArray(keyframes) && keyframes[0]?.boxShadow) {
+        const row = this.closest('li')
+        motion.savedRow = row?.id ?? ''
+      }
+      if (this.matches('.sortable-row') && Array.isArray(keyframes) && keyframes.at(-1)?.height === '0px') {
+        motion.removedRow = this.id
+      }
+      if (this.matches('.category-count')) motion.uncategorizedMotion = this.textContent ?? ''
+      if (this.matches('.screen-header h1') && Array.isArray(keyframes)) {
+        motion.titleMotion = String(keyframes[0]?.transform)
+      }
+      if (this.matches('.screen-transition') && Array.isArray(keyframes)) {
+        motion.contentMotion = String(keyframes[0]?.transform)
+      }
+      return animate.call(this, keyframes, options)
+    }
+  })
+  await page.goto('/')
+  const root = page.locator('html')
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
+  await page.getByRole('button', { name: 'Ajouter un rayon' }).click()
+  const create = page.getByRole('dialog', { name: 'Ajouter un rayon' })
+  await waitForSheet(create)
+  await create.getByLabel('Nom', { exact: true }).fill('Fruits')
+  await create.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(create).toBeHidden()
+  const category = page.getByRole('button', { name: 'Modifier Fruits' })
+  const categoryId = await category.locator('../..').getAttribute('id')
+  if (!categoryId) throw new Error('Rayon introuvable.')
+  await expect(root).toHaveAttribute('data-saved-row', categoryId)
+
+  await category.click()
+  const edit = page.getByRole('dialog', { name: 'Modifier la catégorie' })
+  await waitForSheet(edit)
+  await edit.getByLabel('Nom', { exact: true }).fill('Frais')
+  await root.evaluate((element) => element.removeAttribute('data-saved-row'))
+  await edit.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(page.getByRole('button', { name: 'Modifier Frais' })).toBeVisible()
+  await expect(root).toHaveAttribute('data-saved-row', categoryId)
+
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await addItem(page, 'Poires')
+  const article = page.getByRole('button', { name: 'Actions pour Poires' })
+  const articleId = await article.locator('../..').getAttribute('id')
+  if (!articleId) throw new Error('Article introuvable.')
+  await expect(root).toHaveAttribute('data-saved-row', articleId)
+  await article.click()
+  await page.getByRole('button', { name: 'Modifier Poires' }).click()
+  const itemForm = page.getByRole('dialog', { name: 'Modifier l’article' })
+  await waitForSheet(itemForm)
+  await itemForm.getByRole('combobox').selectOption({ label: 'Frais' })
+  await root.evaluate((element) => element.removeAttribute('data-saved-row'))
+  await itemForm.getByRole('button', { name: 'Enregistrer' }).click()
+  await expect(root).toHaveAttribute('data-saved-row', articleId)
+  await expect(page.getByRole('heading', { name: 'Frais' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Rayons', exact: true }).click()
+  await page.getByRole('button', { name: 'Modifier Frais' }).click()
+  await waitForSheet(edit)
+  await edit.getByRole('button', { name: 'Supprimer la catégorie' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer la catégorie' }).click()
+  await expect(root).toHaveAttribute('data-removed-row', categoryId)
+  await expect(page.getByRole('button', { name: 'Modifier Frais' })).toBeHidden()
+
+  await page.getByRole('button', { name: 'Liste', exact: true }).click()
+  await expect(root).toHaveAttribute('data-uncategorized-motion', '1 art.')
+  await article.click()
+  await page.getByRole('button', { name: 'Supprimer Poires' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer', exact: true }).click()
+  await expect(root).toHaveAttribute('data-removed-row', articleId)
+  await expect(article).toHaveCount(0)
+  for (const [name, offset] of [
+    ['Courses', 14],
+    ['Rayons', 14],
+    ['Courses', -14],
+    ['Liste', -14],
+    ['Rayons', 14],
+    ['Liste', -14],
+  ] as const) {
+    await root.evaluate((element) => {
+      element.removeAttribute('data-title-motion')
+      element.removeAttribute('data-content-motion')
+    })
+    await page.getByRole('button', { name, exact: true }).click()
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+    await expect(root).toHaveAttribute('data-title-motion', `translateX(${offset}px)`)
+    await expect(root).toHaveAttribute('data-content-motion', `translateX(${Math.sign(offset) * 8}px)`)
+  }
 })

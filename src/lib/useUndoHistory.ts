@@ -18,7 +18,7 @@ export function useUndoHistory() {
 
   async function undo(mode: Mode) {
     const action = history[mode].at(-1)
-    if (!action || undoing.current) return
+    if (!action || undoing.current) return false
     undoing.current = true
     setBusy(true)
     try {
@@ -26,8 +26,10 @@ export function useUndoHistory() {
       setHistory((current) => ({ ...current, [mode]: current[mode].filter((entry) => entry !== action) }))
       if (restored) toast.success('Action annulée.')
       else toast.info('Cette action ne peut plus être annulée.')
+      return restored
     } catch {
       toast.error('Impossible d’annuler cette action. Réessayez.')
+      return false
     } finally {
       undoing.current = false
       setBusy(false)

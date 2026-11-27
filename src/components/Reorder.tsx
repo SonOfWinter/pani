@@ -4,9 +4,10 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, ShoppingBasket } from 'lucide-react'
+import { GripVertical } from 'lucide-react'
 import { createContext, useContext, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import { animateDrop } from '../lib/list-motion'
+import { PaniBasket, shoppingOrigin, type ShoppingOrigin } from './ShoppingBadge'
 
 const verticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 const verticalModifiers = [verticalAxis]
@@ -170,11 +171,12 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
   menu?: ReactNode
   menuOpen?: boolean
   onMenuChange?: (open: boolean) => void
-  onSwipeRight?: () => void
+  onSwipeRight?: (origin: ShoppingOrigin) => void
   appearance?: CSSProperties
   children: ReactNode
 }) {
   const layout = useContext(ItemDragLayout)
+  const swipeBasket = useRef<HTMLDivElement>(null)
   const suppressClick = useRef(false)
   const gesture = useRef<{ id: number; x: number; y: number; locked: boolean } | null>(null)
   const [slide, setSlide] = useState<number>()
@@ -220,7 +222,7 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
     if (dx < -32) onMenuChange?.(true)
     if (dx > 32) {
       if (menuOpen) onMenuChange?.(false)
-      else onSwipeRight?.()
+      else onSwipeRight?.(shoppingOrigin(swipeBasket.current ?? event.currentTarget))
     }
   }
 
@@ -259,8 +261,8 @@ export function SortableRow({ id, label, disabled = false, dropDisabled = false,
       )}
       {onSwipeRight && slide !== undefined && slide > 0 && (
         <div className="absolute inset-y-0 left-0 flex items-center" aria-hidden="true">
-          <div className="swipe-basket" style={{ width: basketWidth }}>
-            <ShoppingBasket size={19} />
+          <div ref={swipeBasket} className="swipe-basket" style={{ width: basketWidth }}>
+            <PaniBasket size={19} />
           </div>
         </div>
       )}

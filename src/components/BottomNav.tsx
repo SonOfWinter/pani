@@ -1,12 +1,9 @@
 import { List, ShoppingCart, Tags } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import type { Mode } from '../data/database'
+import { navigation, navigationIndex } from '../lib/navigation'
 
-const tabs = [
-  { mode: 'list', label: 'Liste', Icon: List },
-  { mode: 'shopping', label: 'Courses', Icon: ShoppingCart },
-  { mode: 'categories', label: 'Catégories', Icon: Tags },
-] as const
+const icons = { list: List, shopping: ShoppingCart, categories: Tags } satisfies Record<Mode, typeof List>
 
 export function BottomNav({ mode, disabled, onNavigate }: {
   mode: Mode
@@ -19,22 +16,25 @@ export function BottomNav({ mode, disabled, onNavigate }: {
         <div
           className="bottom-nav-indicator-track"
           aria-hidden="true"
-          style={{ '--active-tab': tabs.findIndex((tab) => tab.mode === mode) } as CSSProperties}
+          style={{ '--active-tab': navigationIndex(mode) } as CSSProperties}
         >
           <div className="bottom-nav-indicator" />
         </div>
-        {tabs.map(({ mode: value, label, Icon }) => (
-          <button
-            key={value}
-            type="button"
-            disabled={disabled}
-            aria-pressed={mode === value}
-            onClick={() => onNavigate(value)}
-          >
-            <Icon size={21} aria-hidden="true" />
-            <span>{label}</span>
-          </button>
-        ))}
+        {navigation.map(({ mode: value, label }) => {
+          const Icon = icons[value]
+          return (
+            <button
+              key={value}
+              type="button"
+              disabled={disabled}
+              aria-pressed={mode === value}
+              onClick={() => onNavigate(value)}
+            >
+              <Icon size={21} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

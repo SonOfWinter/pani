@@ -39,9 +39,9 @@ export async function saveCategory(name: string, customColor: string, emoji: str
       const existing = await database.categories.get(id)
       if (!existing) throw new Error('Cette catégorie a été supprimée.')
       const saved = { ...existing, name: cleanName, normalizedName, customColor, emoji: symbol || undefined, updatedAt }
-      if (sameCategoryDetails(existing, saved)) return { value: undefined }
+      if (sameCategoryDetails(existing, saved)) return { value: id }
       await database.categories.put(saved)
-      return { value: undefined, undo: undoMutation(async () => {
+      return { value: id, undo: undoMutation(async () => {
         const current = await database.categories.get(id)
         if (!current || !sameCategoryDetails(current, saved) || await nameTaken(existing)) return false
         await database.categories.update(id, {
@@ -69,7 +69,7 @@ export async function saveCategory(name: string, customColor: string, emoji: str
       updatedAt,
     }
     await database.categories.add(category)
-    return { value: undefined, undo: undoMutation(async () => {
+    return { value: category.id, undo: undoMutation(async () => {
       const current = await database.categories.get(category.id)
       if (!current || !sameCategoryDetails(current, category)) return false
       if (await database.items.filter((item) => item.categoryId === category.id).first()) return false

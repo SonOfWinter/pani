@@ -8,6 +8,6 @@ test('la navigation est limitée aux trois vues', () => {
   expect(html).toContain('Navigation principale')
   expect(html).toContain('>Liste</span>')
   expect(html).toContain('>Courses</span>')
-  expect(html).toContain('>Catégories</span>')
+  expect(html).toContain('>Rayons</span>')
   expect(html).not.toContain('aria-label="Rechercher"')
 })

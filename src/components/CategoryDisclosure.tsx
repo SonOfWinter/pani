@@ -33,7 +33,7 @@ export function CategoryDisclosure({ category, count, expanded, searching = fals
           <span className="flex shrink-0 items-center gap-2">
             {count > 0 && (
               <>
-                <span aria-hidden="true" className="tabular-nums">{count} art.</span>
+                <span aria-hidden="true" className="category-count inline-block tabular-nums">{count} art.</span>
                 <span id={`${id}-count`} className="sr-only">
                   {count} {count === 1 ? 'article' : 'articles'}
                 </span>

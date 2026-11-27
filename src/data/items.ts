@@ -82,16 +82,35 @@ export function quantityParts(quantity: string) {
   }
 }
 
-export async function changeQuantity(id: string, delta: -1 | 1, shopping = false) {
+export type QuantityChange = -1 | 1 | { count: number }
+
+export function formatQuantityCount(count: number) {
+  return count.toLocaleString('fr-FR', { useGrouping: false, maximumSignificantDigits: 21 })
+}
+
+export function parseQuantityCount(value: string) {
+  const trimmed = value.trim()
+  if (!/^\d+(?:[,.]\d+)?$/.test(trimmed)) return null
+  const count = Number(trimmed.replace(',', '.'))
+  return count > 0 && count <= Number.MAX_SAFE_INTEGER ? count : null
+}
+
+export async function changeQuantity(id: string, change: QuantityChange, shopping = false) {
   await database.mutate(async () => {
     const item = await database.items.get(id)
     if (!item) throw new Error('Cet article a été supprimé.')
     const entry = shopping ? item.shopping : item
     if (!entry) throw new Error('Cet article a été retiré des courses.')
     const { count, suffix } = quantityParts(entry.quantity)
-    if (delta < 0 && count <= 1) return
-    const next = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, count + delta))
-    const quantity = String(next).replace('.', ',') + suffix
+    if (change === -1 && count <= 1) return
+    const next = typeof change === 'number'
+      ? Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, count + change))
+      : change.count
+    if (!Number.isFinite(next) || next <= 0 || next > Number.MAX_SAFE_INTEGER) {
+      throw new Error('Saisissez une quantité valide.')
+    }
+    if (next === count) return
+    const quantity = formatQuantityCount(next) + suffix
     if (shopping && item.shopping) {
       await database.items.update(id, { shopping: { ...item.shopping, quantity } })
     } else {
