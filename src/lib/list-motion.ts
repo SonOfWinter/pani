@@ -9,14 +9,47 @@ export async function animateRemoval(rows: Array<HTMLElement | null>) {
   await Promise.allSettled(animations.map((animation) => animation.finished))
 }
 
-export function animateSavedItem(id: string) {
+export function animateSavedRow(id: string, created: boolean, fromTop?: number) {
   if (reducedMotion()) return
   requestAnimationFrame(() => {
-    document.getElementById(`reorder-row-${id}`)?.querySelector('.row-content')?.animate(
-      [{ backgroundColor: 'color-mix(in srgb, var(--primary) 35%, var(--background))' }, { backgroundColor: 'var(--background)' }],
-      { duration: 370, easing: 'ease-out' },
-    )
+    const row = document.getElementById(`reorder-row-${id}`)
+    const content = row?.querySelector<HTMLElement>('.row-content')
+    if (!row || !content || row.closest('[inert]')) return
+    const bounds = row.getBoundingClientRect()
+    if (bounds.bottom <= 0 || bounds.top >= window.innerHeight) return
+    if (created) {
+      row.animate([{ scale: '.98', opacity: 0.35 }, { scale: '1', opacity: 1 }],
+        { duration: 220, easing: 'ease-out' })
+    } else if (fromTop !== undefined && fromTop >= 0 && fromTop < window.innerHeight) {
+      animateDrop(row, fromTop - bounds.top)
+    }
+    content.animate([
+      { boxShadow: 'inset 0 0 0 1px var(--ring), inset 0 0 24px color-mix(in srgb, var(--primary) 70%, transparent)' },
+      { boxShadow: 'inset 0 0 0 1px transparent, inset 0 0 0 transparent' },
+    ], { duration: created ? 460 : 330, easing: 'ease-out' })
   })
+}
+
+export async function animateRowRemoval(row: HTMLElement | null) {
+  if (!row || reducedMotion()) return
+  const bounds = row.getBoundingClientRect()
+  if (bounds.height <= 0 || bounds.bottom <= 0 || bounds.top >= window.innerHeight) return
+  const animation = row.animate([
+    { height: `${bounds.height}px`, opacity: 1, overflow: 'hidden' },
+    { height: '0px', opacity: 0, overflow: 'hidden', borderWidth: '0px' },
+  ], { duration: 200, easing: 'cubic-bezier(.5,0,.65,.35)', fill: 'forwards' })
+  await Promise.allSettled([animation.finished])
+  return animation
+}
+
+export function animateModeChange(title: HTMLElement, content: HTMLElement, direction: number) {
+  if (reducedMotion()) return
+  const options = { duration: 260, easing: 'cubic-bezier(.2,.8,.25,1)' }
+  const animations = [title, content].map((element, index) => element.animate([
+    { transform: `translateX(${direction * (index ? 8 : 14)}px)`, opacity: 0.35 },
+    { transform: 'translateX(0)', opacity: 1 },
+  ], options))
+  return () => animations.forEach((animation) => animation.cancel())
 }
 
 export function animateDrop(element: HTMLElement, offset: number, fade = false) {

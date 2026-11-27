@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { animateCelebration, animateCheck, animateRemoval, animateRowArrival } from '../lib/list-motion'
 import { QuantityStepper } from './QuantityStepper'
 import { CategoryDisclosure } from './CategoryDisclosure'
-import { changeQuantity, clearShopping, setItemChecked, uncheckAll } from '../data/items'
+import { changeQuantity, clearShopping, setItemChecked, uncheckAll, type QuantityChange } from '../data/items'
 import type { RecordUndo } from '../data/undo'
 import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
@@ -23,7 +23,7 @@ function focusShoppingControl(id: string) {
 function ShoppingRow({ item, onToggle, onQuantity }: {
   item: ShoppingItem
   onToggle: (item: ShoppingItem) => void
-  onQuantity: (id: string, delta: -1 | 1) => void
+  onQuantity: (id: string, change: QuantityChange) => void
 }) {
   return (
     <li id={`shopping-row-${item.id}`} className="shopping-row flex items-center gap-2 py-1 pr-2">
@@ -44,7 +44,7 @@ function ShoppingRow({ item, onToggle, onQuantity }: {
           {item.name}
         </span>
       </label>
-      <QuantityStepper item={item} onChange={(delta) => onQuantity(item.id, delta)} />
+      <QuantityStepper item={item} onChange={(change) => onQuantity(item.id, change)} />
     </li>
   )
 }
@@ -150,9 +150,9 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
     }
   }
 
-  async function adjustQuantity(id: string, delta: -1 | 1) {
+  async function adjustQuantity(id: string, change: QuantityChange) {
     try {
-      await changeQuantity(id, delta, true)
+      await changeQuantity(id, change, true)
       setError('')
     } catch {
       setError('Impossible de modifier la quantité.')
@@ -214,7 +214,7 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
                 return next
               })}>
               <ul className="divide-y divide-border">
-                {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
+                {items.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, change) => void adjustQuantity(id, change)} />)}
               </ul>
             </CategoryDisclosure>
           </section>
@@ -226,7 +226,7 @@ export function ShoppingView({ items, categories, recordUndo }: { items: Shoppin
             Articles pris (<span ref={checkedCount} className="shopping-count">{checked.length}</span>)
           </summary>
           <ul className="mb-3 divide-y divide-muted">
-            {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, delta) => void adjustQuantity(id, delta)} />)}
+            {checked.map((item) => <ShoppingRow key={item.id} item={item} onToggle={(value) => void toggle(value)} onQuantity={(id, change) => void adjustQuantity(id, change)} />)}
           </ul>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void resetChecks()}>Tout décocher</Button>

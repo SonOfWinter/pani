@@ -8,9 +8,9 @@ La flèche d’annulation du bandeau est commune aux trois vues. Chaque vue cons
 
 Le bandeau supérieur reste ancré pendant le défilement. Son emplacement réserve la hauteur du bandeau développé pour garder la position de lecture lors de la transition. Le bandeau de mise à jour partage cet emplacement et suit les actions lorsque le titre se compacte.
 
-Dans Liste et Catégories, l’interface affiche le nouvel ordre dès le dépôt et conserve cet aperçu jusqu’à la lecture de la révision validée. Le calcul des positions est partagé avec les services, qui relisent les données dans la transaction Dexie. En cas d’échec, l’aperçu est retiré et l’interface reflète les données locales.
+Dans Liste et Rayons, l’interface affiche le nouvel ordre dès le dépôt et conserve cet aperçu jusqu’à la lecture de la révision validée. Le calcul des positions est partagé avec les services, qui relisent les données dans la transaction Dexie. En cas d’échec, l’aperçu est retiré et l’interface reflète les données locales.
 
-Le glisser-déposer suit l’axe vertical dans Liste et Catégories. Dans Liste, la détection de cible projette le pointeur sur cet axe et conserve les rayons comme destinations.
+Le glisser-déposer suit l’axe vertical dans Liste et Rayons. Dans Liste, la détection de cible projette le pointeur sur cet axe et conserve les rayons comme destinations.
 
 Au survol d’un rayon ouvert, les lignes de destination se décalent pour prévisualiser l’insertion. Un déplacement validé rejoint l’historique de sa vue. Son inverse rétablit seulement les positions et les catégories concernées dans Dexie, après vérification des emplacements.
 

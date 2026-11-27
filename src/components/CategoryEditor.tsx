@@ -1,11 +1,12 @@
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
-import { useRef, useState, type FormEvent } from 'react'
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { categoryColor, deleteCategory, icons, saveCategory } from '../data/categories'
 import type { Category } from '../data/database'
 import { moveCategory, planCategoryMove } from '../data/order'
 import type { useOrderPreview } from '../lib/useOrderPreview'
 import type { RecordUndo } from '../data/undo'
+import { animateRowRemoval, animateSavedRow } from '../lib/list-motion'
 import { categoryBackground, CategoryLabel } from './CategoryLabel'
 import { Reorder, SortableRow } from './Reorder'
 import { toast } from 'sonner'
@@ -13,7 +14,13 @@ import { BottomSheet, type BottomSheetHandle } from './BottomSheet'
 import { useConfirm } from './ui/confirm'
 import { Button } from './ui/button'
 
-function CategoryForm({ category, recordUndo, onClose }: { category: Category | null; recordUndo: RecordUndo; onClose: () => void }) {
+function CategoryForm({ category, recordUndo, onClose, onDelete, onDeleted }: {
+  category: Category | null
+  recordUndo: RecordUndo
+  onClose: () => void
+  onDelete: (category: Category) => Promise<void>
+  onDeleted: (id: string) => void
+}) {
   const confirm = useConfirm()
   const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(category?.name ?? '')
@@ -22,13 +29,14 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function run(operation: () => Promise<void>, message: string) {
+  async function run<Result>(operation: () => Promise<Result>, message: string, after: (result: Result) => void) {
     setBusy(true)
     setError('')
     try {
-      await operation()
+      const result = await operation()
       sheet.current?.dismiss(() => {
         onClose()
+        after(result)
         toast.success(message)
       })
     } catch (reason) {
@@ -41,7 +49,11 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!busy) void run(() => saveCategory(name, color, emoji, category?.id, recordUndo), category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.')
+    if (!busy) void run(
+      () => saveCategory(name, color, emoji, category?.id, recordUndo),
+      category ? 'Catégorie modifiée.' : 'Catégorie ajoutée.',
+      (id) => animateSavedRow(id, !category),
+    )
   }
 
   async function remove(current: Category) {
@@ -50,7 +62,7 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
       description: 'Ses articles iront dans « Sans catégorie ».',
       action: 'Supprimer la catégorie',
     })) {
-      await run(() => deleteCategory(current.id, recordUndo), 'Catégorie supprimée.')
+      await run(() => onDelete(current), 'Catégorie supprimée.', () => onDeleted(current.id))
     }
   }
 
@@ -58,7 +70,7 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
     <BottomSheet ref={sheet} titleId="category-dialog-title" busy={busy} onClose={onClose}>
       <form className="grid gap-4" onSubmit={(event) => submit(event)}>
         <h2 id="category-dialog-title" className="text-xl font-semibold">
-          {category ? 'Modifier la catégorie' : 'Ajouter une catégorie'}
+          {category ? 'Modifier la catégorie' : 'Ajouter un rayon'}
         </h2>
         <label className="grid gap-1">
           Nom
@@ -87,11 +99,48 @@ function CategoryForm({ category, recordUndo, onClose }: { category: Category | 
   )
 }
 
-export function CategoryEditor({ categories, order, recordUndo }: { categories: Category[]; order: ReturnType<typeof useOrderPreview>; recordUndo: RecordUndo }) {
+export function CategoryEditor({ categories, order, recordUndo, onCategoryRemoved }: {
+  categories: Category[]
+  order: ReturnType<typeof useOrderPreview>
+  recordUndo: RecordUndo
+  onCategoryRemoved: (id: string) => void
+}) {
   const [editor, setEditor] = useState<{ category: Category | null }>()
   const [error, setError] = useState('')
-  const visibleCategories = order.apply(categories)
+  const [departing, setDeparting] = useState<Category>()
+  const departureAnimation = useRef<Animation | undefined>(undefined)
+  const ordered = order.apply(categories)
+  const visibleCategories = departing && !ordered.some((category) => category.id === departing.id)
+    ? [...ordered, departing].sort((a, b) => a.position - b.position)
+    : ordered
   const [announcement, setAnnouncement] = useState('')
+
+  useLayoutEffect(() => {
+    if (departing) return
+    departureAnimation.current?.cancel()
+    departureAnimation.current = undefined
+  }, [departing])
+
+  async function remove(category: Category) {
+    setDeparting(category)
+    try {
+      await deleteCategory(category.id, recordUndo)
+      onCategoryRemoved(category.id)
+    } catch (reason) {
+      setDeparting(undefined)
+      throw reason
+    }
+  }
+
+  function foldRemovedCategory(id: string) {
+    requestAnimationFrame(() => {
+      void animateRowRemoval(document.getElementById(`reorder-row-${id}`)).then((animation) => {
+        departureAnimation.current = animation
+        setDeparting(undefined)
+        document.getElementById('add-category')?.focus({ preventScroll: true })
+      })
+    })
+  }
 
   async function reorder(id: string, target: string) {
     setError('')
@@ -109,22 +158,24 @@ export function CategoryEditor({ categories, order, recordUndo }: { categories: 
   return (
     <section aria-label="Gérer les catégories">
       <Button id="add-category" className="mb-4" onClick={() => setEditor({ category: null })}>
-        <Plus size={18} /> Ajouter une catégorie
+        <Plus size={18} /> Ajouter un rayon
       </Button>
       <p role="status" className="sr-only">{announcement}</p>
       {error && <p role="alert">{error}</p>}
-      {categories.length === 0 && <p className="empty-group">Aucune catégorie.</p>}
+      {visibleCategories.length === 0 && <p className="empty-group">Aucune catégorie.</p>}
       <Reorder showPreview={false} onDrop={({ active, over }) => {
         if (over && active.id !== over.id && !order.moving) void reorder(String(active.id), String(over.id))
       }}>
         <SortableContext items={visibleCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
           <ul className="grid gap-1">
             {visibleCategories.map((category) => (
-              <SortableRow key={category.id} id={category.id} label={category.name} dragPending={order.moving} appearance={categoryBackground(category)}>
+              <SortableRow key={category.id} id={category.id} label={category.name}
+                dragPending={order.moving || Boolean(departing)} appearance={categoryBackground(category)}>
                 <button
                   type="button"
                   className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left font-medium"
                   aria-label={`Modifier ${category.name}`}
+                  disabled={category.id === departing?.id}
                   onClick={() => setEditor({ category })}
                 >
                   <CategoryLabel category={category} />
@@ -134,7 +185,8 @@ export function CategoryEditor({ categories, order, recordUndo }: { categories: 
           </ul>
         </SortableContext>
       </Reorder>
-      {editor && <CategoryForm category={editor.category} recordUndo={recordUndo} onClose={() => setEditor(undefined)} />}
+      {editor && <CategoryForm category={editor.category} recordUndo={recordUndo} onClose={() => setEditor(undefined)}
+        onDelete={remove} onDeleted={foldRemovedCategory} />}
     </section>
   )
 }

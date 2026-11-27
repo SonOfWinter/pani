@@ -10,7 +10,7 @@ export function ItemEditor({ item, categories, recordUndo, onClose, onSave }: {
   categories: Category[]
   recordUndo: RecordUndo
   onClose: () => void
-  onSave: (id: string) => void
+  onSave: (id: string, categoryId: string | null) => void
 }) {
   const sheet = useRef<BottomSheetHandle>(null)
   const [name, setName] = useState(item?.name ?? '')
@@ -29,7 +29,7 @@ export function ItemEditor({ item, categories, recordUndo, onClose, onSave }: {
     setSaving(true)
     try {
       const id = await saveItem(name, quantity, categoryId || null, item?.id, recordUndo)
-      sheet.current?.dismiss(() => onSave(id))
+      sheet.current?.dismiss(() => onSave(id, categoryId || null))
     } catch {
       setError('Impossible d’enregistrer cet article. Réessayez.')
       setSaving(false)

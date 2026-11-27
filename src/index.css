@@ -420,8 +420,28 @@ html:has(.pani-modal[open]) {
   inset: -4px 0;
 }
 
-.quantity-stepper output {
-  @apply max-w-[5rem] min-w-6 break-all text-center text-sm font-semibold;
+.quantity-value {
+  @apply relative grid min-h-9 min-w-11 place-items-center rounded-md;
+}
+
+.quantity-value output {
+  @apply max-w-[5rem] break-all text-center text-sm font-semibold;
+}
+
+.quantity-value:focus-within {
+  @apply ring-2 ring-ring;
+}
+
+.quantity-value:focus-within output {
+  @apply invisible;
+}
+
+.quantity-value input {
+  @apply absolute inset-0 size-full cursor-text rounded-md bg-transparent text-center text-base font-semibold opacity-0 outline-none;
+}
+
+.quantity-value input:focus {
+  @apply opacity-100;
 }
 
 .drag-preview {

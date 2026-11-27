@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useCloudBackup } from './backup/useCloudBackup'
 import { BackupPanel } from './components/BackupPanel'
 import { BottomNav } from './components/BottomNav'
+import { navigation, navigationIndex } from './lib/navigation'
 import { CategoryEditor } from './components/CategoryEditor'
 import { ItemEditor } from './components/ItemEditor'
 import { CategoryDisclosure } from './components/CategoryDisclosure'
@@ -17,7 +18,7 @@ import { useConfirm } from './components/ui/confirm'
 import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
 import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
-import { animateCounter, animateRemoval, animateSavedItem, animateUndo, captureUndoMotion } from './lib/list-motion'
+import { animateCounter, animateModeChange, animateRemoval, animateRowRemoval, animateSavedRow, animateUndo, captureUndoMotion } from './lib/list-motion'
 import { moveItem, planItemMove } from './data/order'
 import { useOrderPreview } from './lib/useOrderPreview'
 import { useUndoHistory } from './lib/useUndoHistory'
@@ -56,7 +57,7 @@ export function App() {
   const [collapsedCategories, setCollapsedCategories] = useState(new Set<string | null>())
   const [purchaseFeedback, setPurchaseFeedback] = useState<Record<string, PurchaseFeedback>>({})
   const [openMenu, setOpenMenu] = useState<string>()
-  const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
+  const [editor, setEditor] = useState<{ item: Item | null; fromTop?: number } | null>(null)
 
   const revision = result?.list?.state.revision ?? 0
   const itemOrder = useOrderPreview(revision)
@@ -64,12 +65,31 @@ export function App() {
   const items = itemOrder.apply(result?.list?.items ?? [])
   const categories = result?.list?.categories ?? []
   const mode = result?.list?.state.mode ?? 'list'
+  const activeTab = navigationIndex(mode)
   const movePending = mode === 'list' ? itemOrder.moving : mode === 'categories' && categoryOrder.moving
   const undoUnavailable = !result?.list || !undo.history[mode].length || undo.busy || movePending
   const shoppingItems = items.flatMap((item) => item.shopping
     ? [{ ...item, quantity: item.shopping.quantity, checkedAt: item.shopping.checkedAt }]
     : [])
   const remaining = shoppingItems.filter((item) => item.checkedAt === null).length
+  const screenTitle = useRef<HTMLHeadingElement>(null)
+  const screenContent = useRef<HTMLDivElement>(null)
+  const previousMode = useRef(mode)
+  const uncategorizedArrival = useRef(false)
+
+  useLayoutEffect(() => {
+    const previous = previousMode.current
+    previousMode.current = mode
+    if (mode === 'list' && uncategorizedArrival.current) {
+      uncategorizedArrival.current = false
+      const count = document.getElementById('category:')?.querySelector<HTMLElement>('.category-count')
+      if (count) animateCounter(count, 1)
+    }
+    if (previous === mode || !screenTitle.current || !screenContent.current) return
+    const direction = Math.sign(activeTab - navigationIndex(previous))
+    return animateModeChange(screenTitle.current, screenContent.current, direction)
+  }, [activeTab, mode])
+
   const shoppingCount = useRef<HTMLSpanElement>(null)
   const previousRemaining = useRef(remaining)
   const undoMotion = useRef<{ revision: number; mode: Mode; layout: NonNullable<ReturnType<typeof captureUndoMotion>> } | undefined>(undefined)
@@ -152,9 +172,14 @@ export function App() {
   async function remove(item: Item) {
     if (!await confirm({ title: `Supprimer « ${item.name} » ?`, action: 'Supprimer' })) return
     await run(async () => {
-      await animateRemoval([document.getElementById(`reorder-row-${item.id}`)])
-      await deleteItem(item.id, recordListUndo)
       setOpenMenu(undefined)
+      const animation = await animateRowRemoval(document.getElementById(`reorder-row-${item.id}`))
+      try {
+        await deleteItem(item.id, recordListUndo)
+      } catch (error) {
+        animation?.cancel()
+        throw error
+      }
       document.getElementById('add-item')?.focus()
     }, 'Impossible de supprimer cet article.', `${item.name} supprimé.`)
   }
@@ -196,7 +221,7 @@ export function App() {
         <div ref={screenTop} className="screen-top">
           <header className="screen-header">
             <div>
-              <h1>{mode === 'list' ? 'Liste' : mode === 'shopping' ? 'Courses' : 'Catégories'}</h1>
+              <h1 ref={screenTitle}>{navigation[activeTab].label}</h1>
               {mode !== 'categories' && (
                 <p className="text-sm text-muted-foreground" aria-live="polite">
                   {mode === 'shopping'
@@ -206,15 +231,15 @@ export function App() {
               )}
             </div>
             <div className="flex shrink-0">
-              <Button variant="ghost" className="px-2 aria-disabled:opacity-50" aria-label="Annuler la dernière action"
-                aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undoLastAction() }}>
-                <Undo2 size={21} aria-hidden="true" />
-              </Button>
               {mode === 'shopping' && (
                 <Button variant="ghost" className="px-2" aria-label="Vider les courses" disabled={!shoppingItems.length} onClick={() => void emptyShopping()}>
                   <Trash2 size={21} />
                 </Button>
               )}
+              <Button variant="ghost" className="px-2 aria-disabled:opacity-50" aria-label="Annuler la dernière action"
+                aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undoLastAction() }}>
+                <Undo2 size={21} aria-hidden="true" />
+              </Button>
               <Button variant="ghost" className="px-2" aria-label="Sauvegardes" disabled={!result?.list} onClick={() => setBackupOpen(true)}>
                 <Cloud size={21} />
               </Button>
@@ -222,10 +247,13 @@ export function App() {
           </header>
           <UpdateNotice />
         </div>
-        <div key={mode} className="screen-transition" onFocus={revealFocusedControl}>
+        <div key={mode} ref={screenContent} className="screen-transition" onFocus={revealFocusedControl}>
           {result?.error && <p role="alert">Pani ne peut pas ouvrir les données locales.</p>}
           {!result && <p role="status">Ouverture de la liste…</p>}
-          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} order={categoryOrder} recordUndo={(action) => undo.record('categories', action)} />}
+          {result?.list && mode === 'categories' && <CategoryEditor categories={categories} order={categoryOrder} recordUndo={(action) => undo.record('categories', action)}
+            onCategoryRemoved={(id) => {
+              if (items.some((item) => item.categoryId === id)) uncategorizedArrival.current = true
+            }} />}
           {result?.list && mode === 'shopping' && <ShoppingView items={shoppingItems} categories={categories} recordUndo={(action) => undo.record('shopping', action)} />}
           {result?.list && mode === 'list' && (
             <>
@@ -293,7 +321,9 @@ export function App() {
                                       document.getElementById(`reorder-row-${item.id}`)
                                         ?.querySelector<HTMLButtonElement>('[data-swipe-trigger]')?.focus({ preventScroll: true })
                                     }}><ShoppingBasket size={18} /></button>
-                                    <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
+                                    <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({
+                                      item, fromTop: document.getElementById(`reorder-row-${item.id}`)?.getBoundingClientRect().top,
+                                    }) }}><Pencil size={18} /></button>
                                     <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
                                     <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
                                   </>
@@ -336,8 +366,8 @@ export function App() {
                                   {item.shopping && <ShoppingBadge id={`in-shopping-${item.id}`}
                                     arrival={feedback && feedback.kind !== 'error' ? feedback : undefined} />}
                                 </button>
-                                <QuantityStepper item={item} onChange={(delta) => void run(
-                                  () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
+                                <QuantityStepper item={item} onChange={(change) => void run(
+                                  () => changeQuantity(item.id, change), 'Impossible de modifier la quantité.',
                                 )} />
                               </SortableRow>
                             )
@@ -357,10 +387,10 @@ export function App() {
             recordUndo={recordListUndo}
             categories={categories}
             onClose={() => setEditor(null)}
-            onSave={(id) => {
+            onSave={(id, categoryId) => {
               if (!editor.item) setQuery('')
               setEditor(null)
-              animateSavedItem(id)
+              animateSavedRow(id, !editor.item, editor.item?.categoryId !== categoryId ? editor.fromTop : undefined)
               toast.success(editor.item ? 'Article modifié.' : 'Article ajouté.')
             }}
           />
