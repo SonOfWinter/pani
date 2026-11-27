@@ -345,6 +345,67 @@ html:has(.pani-modal[open]) {
   background: var(--shopping-add);
 }
 
+.shopping-flight {
+  @apply pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-full bg-primary text-primary-foreground opacity-0;
+}
+
+.shopping-impact {
+  @apply pointer-events-none absolute inset-0 z-10 rounded-full;
+}
+
+.shopping-spark {
+  @apply absolute top-1/2 left-1/2 size-1.5 rounded-full opacity-0;
+  translate: -50% -50%;
+  background: var(--ring);
+  box-shadow: 0 0 5px var(--ring);
+}
+
+.shopping-spark:nth-child(2n) {
+  @apply rounded-none bg-primary-foreground;
+}
+
+.shopping-count {
+  @apply inline-block tabular-nums;
+}
+
+.shopping-checkbox {
+  @apply relative grid size-5 shrink-0 place-items-center rounded ring-1 ring-inset ring-border;
+}
+
+.shopping-checkbox:has(input:focus-visible) {
+  @apply outline-2 outline-offset-2 outline-ring;
+}
+
+.shopping-check-effect {
+  @apply pointer-events-none absolute inset-0 size-5 rounded bg-primary text-primary-foreground opacity-0;
+  stroke-dasharray: 24;
+}
+
+.shopping-checkbox input:checked + .shopping-check-effect {
+  opacity: 1;
+}
+
+.shopping-complete {
+  @apply my-3 flex items-center justify-center gap-3 rounded-lg border border-border bg-card px-3 py-5 font-semibold;
+}
+
+.completion-mark {
+  @apply relative grid size-7 place-items-center rounded-full bg-primary text-primary-foreground;
+}
+
+.completion-spark {
+  @apply pointer-events-none absolute top-1/2 left-1/2 size-1.5 rounded-full bg-primary-foreground opacity-0;
+  translate: -50% -50%;
+}
+
+.completion-spark:nth-child(odd) {
+  background: var(--ring);
+}
+
+.undo-sparks {
+  @apply pointer-events-none fixed z-30;
+}
+
 .quantity-stepper {
   @apply flex shrink-0 items-center rounded-lg bg-muted tabular-nums;
 }

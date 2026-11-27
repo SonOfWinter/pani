@@ -120,7 +120,7 @@ test('ajoute un article aux courses au clavier et le retrouve après une relance
   await page.keyboard.press('Enter')
   await expect(page.getByText('Avoine ajouté aux courses.', { exact: true })).toBeVisible()
   await expect(item).toHaveAccessibleDescription('Dans Courses')
-  await expect(item.locator('svg')).toBeVisible()
+  await expect(item.locator('svg').first()).toBeVisible()
   await waitForOfflineShell(page)
 
   await context.setOffline(true)
@@ -533,8 +533,10 @@ test('affiche les notifications au-dessus de la navigation sur un petit écran',
   await page.goto('/')
   const name = 'Biscuits au chocolat noir et aux noisettes entières'
   await addItem(page, name)
-  await page.getByRole('button', { name: `Actions pour ${name}` }).press('Alt+ArrowRight')
-  const toast = page.getByText(`${name} ajouté aux courses.`, { exact: true })
+  await page.getByRole('button', { name: `Actions pour ${name}` }).click()
+  await page.getByRole('button', { name: `Supprimer ${name}` }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer', exact: true }).click()
+  const toast = page.getByText(`${name} supprimé.`, { exact: true })
   await expect(toast).toBeVisible()
 
   const navigation = page.getByRole('navigation', { name: 'Navigation principale' })
@@ -911,4 +913,96 @@ test('écarte les lignes du rayon de destination avant le dépôt', async ({ pag
   await expect(uncategorized).toHaveClass(/\bis-over\b/)
   await page.mouse.up()
   await expect(uncategorized.getByRole('button', { name: 'Actions pour Poires' })).toBeVisible()
+})
+
+test('joue la gerbe de particules sur les ajouts successifs et respecte les mouvements réduits', async ({ page }) => {
+  await page.goto('/')
+  for (const name of ['Poires', 'Pommes', 'Riz']) await addItem(page, name)
+  const item = (name: string) => page.getByRole('button', { name: `Actions pour ${name}` })
+  await item('Poires').press('Alt+ArrowRight')
+  await item('Pommes').press('Alt+ArrowRight')
+  for (const name of ['Poires', 'Pommes']) {
+    await expect(item(name)).toHaveAccessibleDescription('Dans Courses')
+    await expect(item(name).locator('.shopping-impact')).toHaveAttribute('data-effect', 'particules')
+    await expect(item(name).locator('.shopping-flight')).toHaveCount(1)
+    await expect(item(name).getByRole('status')).toHaveText(`${name} ajouté aux courses.`)
+  }
+  await expect(page.locator('.pani-toaster').getByText(/ajouté aux courses/)).toHaveCount(0)
+
+  await page.reload()
+  await expect(item('Poires').locator('.shopping-flight')).toHaveCount(0)
+  await item('Poires').press('Alt+ArrowRight')
+  const duplicateStatus = item('Poires').getByRole('status')
+  await expect(duplicateStatus).toHaveText('Poires est déjà dans les courses.')
+  await expect(duplicateStatus).toHaveClass('sr-only')
+  await expect(item('Poires').locator('.shopping-flight')).toHaveCount(0)
+  await expect(item('Poires').locator('.shopping-impact')).toHaveAttribute('data-effect', 'particules')
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await item('Riz').press('Alt+ArrowRight')
+  await expect(item('Riz')).toHaveAccessibleDescription('Dans Courses')
+  await expect(item('Riz').locator('.shopping-impact')).not.toHaveAttribute('data-effect', /./)
+  await item('Riz').press('Alt+ArrowRight')
+  await expect(item('Riz').getByRole('status')).toHaveText('Riz est déjà dans les courses.')
+  await expect(item('Riz').locator('.shopping-impact')).not.toHaveAttribute('data-effect', /./)
+})
+
+test('anime les quantités, l’annulation et la dernière coche', async ({ page }) => {
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate
+    Element.prototype.animate = function (keyframes, options) {
+      const motion = document.documentElement.dataset
+      if (this.matches('.quantity-stepper output') && Array.isArray(keyframes)) {
+        motion.quantityMotion = String(keyframes[0]?.transform)
+      }
+      if (this.matches('.undo-sparks .completion-spark')) motion.undoMotion = 'particules'
+      if (this.matches('.shopping-check-effect') && Array.isArray(keyframes)) {
+        motion.checkMotion = String(keyframes.at(-1)?.strokeDashoffset)
+        motion.checkColor = getComputedStyle(this).backgroundColor
+      }
+      if (this.matches('.screen-header p, .screen-header p .shopping-count')) motion.shoppingCounter = this.textContent ?? ''
+      if (this.matches('#checked-items, #checked-items .shopping-count')) motion.checkedCounter = this.textContent ?? ''
+      if (this.matches('.shopping-complete')) motion.completedMotion = 'true'
+      if (this.matches('section.list-group') && Array.isArray(keyframes) && keyframes.at(-1)?.height === '0px') {
+        motion.categoryFold = 'true'
+      }
+      if (this.matches('.shopping-row') && Array.isArray(keyframes) && keyframes[0]?.clipPath) {
+        motion.returnMotion = 'true'
+      }
+      return animate.call(this, keyframes, options)
+    }
+  })
+  await page.goto('/')
+  await addItem(page, 'Poires')
+  const root = page.locator('html')
+  await page.getByRole('button', { name: 'Augmenter la quantité de Poires' }).click()
+  await expect(root).toHaveAttribute('data-quantity-motion', 'translateY(8px)')
+  await page.getByRole('button', { name: 'Diminuer la quantité de Poires' }).click()
+  await expect(root).toHaveAttribute('data-quantity-motion', 'translateY(-8px)')
+
+  const article = page.getByRole('button', { name: 'Actions pour Poires' })
+  await article.press('Alt+ArrowRight')
+  await expect(article).toHaveAccessibleDescription('Dans Courses')
+  await page.getByRole('button', { name: 'Annuler la dernière action' }).press('Enter')
+  await expect(article).not.toHaveAccessibleDescription('Dans Courses')
+  await expect(root).toHaveAttribute('data-undo-motion', 'particules')
+
+  await article.press('Alt+ArrowRight')
+  await expect(article).toHaveAccessibleDescription('Dans Courses')
+  await page.getByRole('button', { name: 'Courses', exact: true }).click()
+  const checkbox = page.getByRole('checkbox', { name: 'Poires' })
+  await checkbox.click()
+  await expect(page.getByText('Courses terminées.', { exact: true })).toBeVisible()
+  await expect(root).toHaveAttribute('data-check-motion', '0')
+  await expect(root).toHaveAttribute('data-check-color', 'rgb(189, 23, 72)')
+  await expect(root).toHaveAttribute('data-shopping-counter', '0')
+  await expect(root).toHaveAttribute('data-checked-counter', '1')
+  await expect(root).toHaveAttribute('data-completed-motion', 'true')
+  await expect(root).toHaveAttribute('data-category-fold', 'true')
+  await page.getByText('Articles pris (1)', { exact: true }).click()
+  await checkbox.click()
+  await expect(checkbox).not.toBeChecked()
+  await expect(root).toHaveAttribute('data-check-motion', '24')
+  await expect(root).toHaveAttribute('data-check-color', 'rgb(189, 23, 72)')
+  await expect(root).toHaveAttribute('data-return-motion', 'true')
 })

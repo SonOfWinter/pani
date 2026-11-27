@@ -13,3 +13,5 @@ Dans Liste et Catégories, l’interface affiche le nouvel ordre dès le dépôt
 Le glisser-déposer suit l’axe vertical dans Liste et Catégories. Dans Liste, la détection de cible projette le pointeur sur cet axe et conserve les rayons comme destinations.
 
 Au survol d’un rayon ouvert, les lignes de destination se décalent pour prévisualiser l’insertion. Un déplacement validé rejoint l’historique de sa vue. Son inverse rétablit seulement les positions et les catégories concernées dans Dexie, après vérification des emplacements.
+
+Les animations de coche et de décoche gardent brièvement l’ancien état à l’écran pendant que la commande s’écrit dans Dexie. Le retour d’annulation s’appuie sur les positions visibles avant l’action et sur l’ordre local relu après son exécution. Les mouvements réduits désactivent ces transitions.

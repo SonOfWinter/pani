@@ -10,17 +10,22 @@ import { ItemEditor } from './components/ItemEditor'
 import { CategoryDisclosure } from './components/CategoryDisclosure'
 import { QuantityStepper } from './components/QuantityStepper'
 import { CategoryDrop, ItemSortGroup, Reorder, SortableRow } from './components/Reorder'
+import { ShoppingBadge, shoppingOrigin, type ShoppingOrigin } from './components/ShoppingBadge'
 import { ShoppingView } from './components/ShoppingView'
 import { UpdateNotice } from './components/UpdateNotice'
 import { useConfirm } from './components/ui/confirm'
 import { Button } from './components/ui/button'
 import { database, type Item, type Mode } from './data/database'
 import { addToShopping, changeQuantity, clearShopping, deleteItem } from './data/items'
-import { animateRemoval, animateSavedItem } from './lib/list-motion'
+import { animateCounter, animateRemoval, animateSavedItem, animateUndo, captureUndoMotion } from './lib/list-motion'
 import { moveItem, planItemMove } from './data/order'
 import { useOrderPreview } from './lib/useOrderPreview'
 import { useUndoHistory } from './lib/useUndoHistory'
 import type { RecordUndo } from './data/undo'
+
+type PurchaseFeedback =
+  | { kind: 'added' | 'already'; origin: ShoppingOrigin }
+  | { kind: 'error' }
 
 export function App() {
   const screenTop = useRef<HTMLDivElement>(null)
@@ -49,6 +54,7 @@ export function App() {
   const [backupOpen, setBackupOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [collapsedCategories, setCollapsedCategories] = useState(new Set<string | null>())
+  const [purchaseFeedback, setPurchaseFeedback] = useState<Record<string, PurchaseFeedback>>({})
   const [openMenu, setOpenMenu] = useState<string>()
   const [editor, setEditor] = useState<{ item: Item | null } | null>(null)
 
@@ -64,6 +70,32 @@ export function App() {
     ? [{ ...item, quantity: item.shopping.quantity, checkedAt: item.shopping.checkedAt }]
     : [])
   const remaining = shoppingItems.filter((item) => item.checkedAt === null).length
+  const shoppingCount = useRef<HTMLSpanElement>(null)
+  const previousRemaining = useRef(remaining)
+  const undoMotion = useRef<{ revision: number; mode: Mode; layout: NonNullable<ReturnType<typeof captureUndoMotion>> } | undefined>(undefined)
+
+  useLayoutEffect(() => {
+    const direction = remaining - previousRemaining.current
+    previousRemaining.current = remaining
+    if (mode !== 'shopping' || !shoppingCount.current) return
+    const animation = animateCounter(shoppingCount.current, direction)
+    return () => animation?.cancel()
+  }, [mode, remaining])
+
+  useLayoutEffect(() => {
+    const motion = undoMotion.current
+    if (!motion || revision <= motion.revision) return
+    undoMotion.current = undefined
+    if (mode === motion.mode) animateUndo(motion.layout)
+  }, [mode, revision])
+
+  async function undoLastAction() {
+    const layout = captureUndoMotion()
+    const motion = layout ? { revision, mode, layout } : undefined
+    undoMotion.current = motion
+    if (!await undo.undo(mode) && undoMotion.current === motion) undoMotion.current = undefined
+  }
+
   const term = query.trim().toLocaleLowerCase('fr')
   const matching = term ? items.filter((item) => item.name.toLocaleLowerCase('fr').includes(term)) : items
   const groups = [...categories, null].map((category) => ({
@@ -80,12 +112,16 @@ export function App() {
     }
   }
 
-  async function addPurchase(item: Item) {
-    await run(async () => {
+  async function addPurchase(item: Item, origin: ShoppingOrigin) {
+    let feedback: PurchaseFeedback
+    try {
       const added = await addToShopping(item.id, recordListUndo)
-      if (added) toast.success(`${item.name} ajouté aux courses.`)
-      else toast.info(`${item.name} est déjà dans les courses.`)
-    }, 'Impossible d’ajouter cet article aux courses.')
+      feedback = { kind: added ? 'added' : 'already', origin }
+    } catch {
+      feedback = { kind: 'error' }
+    }
+    setPurchaseFeedback((current) => ({ ...current, [item.id]: feedback }))
+    if (feedback.kind === 'added') navigator.vibrate?.(12)
   }
 
   async function emptyShopping() {
@@ -127,6 +163,7 @@ export function App() {
     setOpenMenu(undefined)
     if (next !== 'list') {
       setQuery('')
+      setPurchaseFeedback({})
       setCollapsedCategories(new Set())
     }
     await run(() => database.setMode(next), 'Impossible de changer de vue. Réessayez.')
@@ -163,14 +200,14 @@ export function App() {
               {mode !== 'categories' && (
                 <p className="text-sm text-muted-foreground" aria-live="polite">
                   {mode === 'shopping'
-                    ? `${remaining} ${remaining === 1 ? 'article à acheter' : 'articles à acheter'}`
+                    ? <><span ref={shoppingCount} className="shopping-count">{remaining}</span> {remaining === 1 ? 'article à acheter' : 'articles à acheter'}</>
                     : `${items.length} ${items.length === 1 ? 'article' : 'articles'}`}
                 </p>
               )}
             </div>
             <div className="flex shrink-0">
               <Button variant="ghost" className="px-2 aria-disabled:opacity-50" aria-label="Annuler la dernière action"
-                aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undo.undo(mode) }}>
+                aria-disabled={undoUnavailable} onClick={() => { if (!undoUnavailable) void undoLastAction() }}>
                 <Undo2 size={21} aria-hidden="true" />
               </Button>
               {mode === 'shopping' && (
@@ -235,67 +272,76 @@ export function App() {
                         )}
                         <ItemSortGroup id={groupId} itemIds={groupItems.map((item) => item.id)}
                           expanded={expanded} committing={itemOrder.moving}>
-                          {groupItems.map((item) => (
-                            <SortableRow
-                              key={item.id}
-                              id={item.id}
-                              label={item.name}
-                              disabled={Boolean(term) || !expanded}
-                              dropDisabled={!expanded}
-                              dragPending={itemOrder.moving}
-                              menuOpen={openMenu === item.id}
-                              onSwipeRight={() => void addPurchase(item)}
-                              onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
-                              menu={
-                                <>
-                                  <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={() => void addPurchase(item)}><ShoppingBasket size={18} /></button>
-                                  <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
-                                  <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
-                                  <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
-                                </>
-                              }
-                            >
-                              <button
-                                type="button"
-                                data-swipe-trigger
-                                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
-                                aria-label={`Actions pour ${item.name}`}
-                                aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
-                                aria-expanded={openMenu === item.id}
-                                aria-controls={`actions-${item.id}`}
-                                aria-keyshortcuts="Alt+ArrowRight"
-                                onKeyDown={(event) => {
-                                  if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
-                                  event.preventDefault()
-                                  void addPurchase(item)
-                                }}
-                                onClick={(event) => {
-                                  const open = openMenu !== item.id
-                                  setOpenMenu(open ? item.id : undefined)
-                                  if (open && event.detail === 0) {
-                                    requestAnimationFrame(() => document
-                                      .getElementById(`actions-${item.id}`)
-                                      ?.querySelector('button')
-                                      ?.focus({ preventScroll: true }))
-                                  }
-                                }}
+                          {groupItems.map((item) => {
+                            const feedback = purchaseFeedback[item.id]
+                            return (
+                              <SortableRow
+                                key={item.id}
+                                id={item.id}
+                                label={item.name}
+                                disabled={Boolean(term) || !expanded}
+                                dropDisabled={!expanded}
+                                dragPending={itemOrder.moving}
+                                menuOpen={openMenu === item.id}
+                                onSwipeRight={(origin) => void addPurchase(item, origin)}
+                                onMenuChange={(open) => setOpenMenu(open ? item.id : undefined)}
+                                menu={
+                                  <>
+                                    <button type="button" aria-label={`Ajouter ${item.name} aux courses`} onClick={(event) => {
+                                      void addPurchase(item, shoppingOrigin(event.currentTarget))
+                                      setOpenMenu(undefined)
+                                      document.getElementById(`reorder-row-${item.id}`)
+                                        ?.querySelector<HTMLButtonElement>('[data-swipe-trigger]')?.focus({ preventScroll: true })
+                                    }}><ShoppingBasket size={18} /></button>
+                                    <button type="button" aria-label={`Modifier ${item.name}`} onClick={() => { setOpenMenu(undefined); setEditor({ item }) }}><Pencil size={18} /></button>
+                                    <button type="button" aria-label="Fermer les actions" onClick={() => setOpenMenu(undefined)}><X size={18} /></button>
+                                    <button type="button" aria-label={`Supprimer ${item.name}`} className="delete-action" onClick={() => void remove(item)}><Trash2 size={18} /></button>
+                                  </>
+                                }
                               >
-                                <span className="min-w-0 break-words">{item.name}</span>
-                                {item.shopping && (
-                                  <span id={`in-shopping-${item.id}`} className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
-                                    <span className="sr-only">Dans Courses</span>
-                                    <svg aria-hidden="true" className="size-4" viewBox="0 0 24 24" fill="none"
-                                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M7.5 9 12 3.5 16.5 9 M2 9h20 M3 9l2.5 11h13L21 9 M9 12l1 5 M15 12l-1 5" />
-                                    </svg>
+                                <button
+                                  type="button"
+                                  data-swipe-trigger
+                                  className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left"
+                                  aria-label={`Actions pour ${item.name}`}
+                                  aria-describedby={item.shopping ? `in-shopping-${item.id}` : undefined}
+                                  aria-expanded={openMenu === item.id}
+                                  aria-controls={`actions-${item.id}`}
+                                  aria-keyshortcuts="Alt+ArrowRight"
+                                  onKeyDown={(event) => {
+                                    if (!event.altKey || event.key !== 'ArrowRight' || openMenu === item.id) return
+                                    event.preventDefault()
+                                    void addPurchase(item, shoppingOrigin(event.currentTarget))
+                                  }}
+                                  onClick={(event) => {
+                                    const open = openMenu !== item.id
+                                    setOpenMenu(open ? item.id : undefined)
+                                    if (open && event.detail === 0) {
+                                      requestAnimationFrame(() => document
+                                        .getElementById(`actions-${item.id}`)
+                                        ?.querySelector('button')
+                                        ?.focus({ preventScroll: true }))
+                                    }
+                                  }}
+                                >
+                                  <span className="min-w-0 break-words">
+                                    <span>{item.name}</span>
+                                    <span role="status" className={feedback?.kind === 'error'
+                                      ? 'block text-xs text-muted-foreground' : 'sr-only'}>
+                                      {feedback?.kind === 'added' && item.shopping && `${item.name} ajouté aux courses.`}
+                                      {feedback?.kind === 'already' && item.shopping && `${item.name} est déjà dans les courses.`}
+                                      {feedback?.kind === 'error' && 'Impossible d’ajouter cet article aux courses.'}
+                                    </span>
                                   </span>
-                                )}
-                              </button>
-                              <QuantityStepper item={item} onChange={(delta) => void run(
-                                () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
-                              )} />
-                            </SortableRow>
-                          ))}
+                                  {item.shopping && <ShoppingBadge id={`in-shopping-${item.id}`}
+                                    arrival={feedback && feedback.kind !== 'error' ? feedback : undefined} />}
+                                </button>
+                                <QuantityStepper item={item} onChange={(delta) => void run(
+                                  () => changeQuantity(item.id, delta), 'Impossible de modifier la quantité.',
+                                )} />
+                              </SortableRow>
+                            )
+                          })}
                         </ItemSortGroup>
                       </CategoryDisclosure>
                     </CategoryDrop>
